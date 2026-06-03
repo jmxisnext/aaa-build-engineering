@@ -18,6 +18,13 @@
 *.pdb
 *.ilk
 
+# FASTBuild: vendor binaries (re-download via accel/tools/fastbuild/README.md)
+# + machine-specific generated config + dependency DB
+accel/tools/fastbuild/FBuild*.exe
+accel/tools/fastbuild/LICENSE.TXT
+**/_generated.bff
+*.fdb
+
 # OS / editor noise
 Thumbs.db
 .DS_Store

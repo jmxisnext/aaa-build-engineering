@@ -211,3 +211,56 @@ declarations, not template instantiation or `/O2` codegen, and `/Bt+` showed my
 per-TU cost was ~50 % back-end. PCH attacks parse cost and keeps per-TU
 granularity; unity attacks redundant instantiation+codegen but merges TUs.
 Measure the front/back split before reaching for one."*
+
+## 5. FASTBuild: caching makes the *second* identical build free — what /MP/unity/PCH can't
+
+**What happened:** Same 32 heavy TUs through FASTBuild v1.20
+(`accel/scripts/demo-fbuild.ps1`):
+
+| state | best | vs cache-miss |
+|---|---|---|
+| clean (cache miss) | 5.33 s | 1.00× |
+| clean (cache HIT) | 0.37 s | 14.4× |
+| no-op (incremental) | 0.01 s | 533× |
+
+**The reframe:** a *cold* FASTBuild (5.33 s) is ~identical to `/MP` (5.10 s) —
+it parallelizes by default, so with an empty cache it's just another parallel
+compile, and unity (0.72 s) still beats it cold. FASTBuild's reason to exist is
+the **content-addressable cache**: each `.obj` is keyed on (preprocessed source
++ compiler + options), so any later build of identical input *retrieves* the
+obj (every TU printed `<CACHE>`) instead of recompiling — 0.37 s, 14× faster.
+The no-op (0.01 s) is plain dependency tracking.
+
+**Why a build engineer cares:** `/MP`, unity, and PCH each speed up a *single*
+compile; none makes the *second identical* compile cheap. Real studio cost is
+dominated by exactly those repeats — CI re-running a commit on every push,
+branch switches recompiling already-built files, every engineer clean-building
+code a teammate already compiled. Point `.CachePath` at a shared network/object
+store and those become cross-machine cache hits. That's why the public-AAA
+build conversation centers on FASTBuild/Incredibuild-style **caching +
+distribution** (`FBuildWorker` turns idle boxes into a compile farm), not just
+`/MP`.
+
+**The levers compose, they don't compete:** FASTBuild for the cache + the farm
++ one dependency graph over compile/link/cook; unity or PCH to cut the *cold*
+compile that still happens on a cache miss; `/MP` is the within-process
+baseline FASTBuild already does for you. The layered answer to "cut a 25-min
+build": parallelize (free), remove redundant work (unity/PCH where the profile
+says), then stop rebuilding what hasn't changed (cache).
+
+**Gotcha hit building this:** FASTBuild runs child processes in a *hermetic*
+environment — it does **not** inherit the shell's env. The build failed until
+`Settings.Environment` was handed `PATH` (cl's support DLLs), `INCLUDE`, `TMP`,
+and `SystemRoot` from the activated vcvars. Same lesson as #1 (hand the tool its
+toolchain, don't assume it) and `ci/lessons-learned.md` #2 (the fresh agent had
+no `p4`): hermetic build tools need the environment passed in explicitly — which
+is the *feature* that makes cache keys and distributed builds reproducible.
+
+**Interview-ready bullet:** *"FASTBuild cold ≈ /MP — both are parallel compiles
+— but its cache made a clean build of unchanged code 14× faster (0.37 s vs
+5.3 s), every obj a cache hit. That's the win /MP/unity/PCH can't give: they
+speed one compile; the cache makes the second identical compile free, which is
+where real CI / branch-switch cost lives. Share the cache path and it's
+cross-machine; add FBuildWorker and it's a compile farm. Caveat: it's hermetic,
+so you feed it PATH/INCLUDE/etc. explicitly — the same discipline that makes the
+cache reproducible."*

@@ -16,9 +16,12 @@ acceleration wins on top.
 |---|---|
 | `scripts/activate-msvc.ps1` | Locates the newest MSVC via `vswhere`, imports its `vcvars64` environment into the current PowerShell session. **Dot-source it.** |
 | `scripts/smoke-build.ps1` | Activates the toolchain, compiles + runs `samples/hello`, asserts the output. The "compiler works" proof — exits non-zero on failure, so CI can gate on it. |
-| `scripts/bench.ps1` | Build-acceleration benchmark: compiles N heavy TUs serial / `/MP` / unity / unity-chunks+`/MP` and prints one before/after table. The reusable harness the Track 3 levers plug into. |
+| `scripts/bench.ps1` | Build-acceleration benchmark: compiles N heavy TUs serial / `/MP` / unity / chunked-unity / PCH and prints one before/after table. The reusable harness the Track 3 levers plug into. |
+| `scripts/demo-fbuild.ps1` | FASTBuild lever: builds the same TUs through FASTBuild and measures its cache (clean cache-miss vs cache-HIT vs no-op). |
 | `samples/hello/` | Smallest program that proves compile + run (prints `_MSC_VER`). |
-| `samples/bench/` | `heavy.h` compile-cost fixture + the benchmark results writeup (`README.md`). |
+| `samples/bench/` | `heavy.h` compile-cost fixture + the `/MP`/unity/PCH results writeup (`README.md`). |
+| `samples/fbuild/` | `fbuild.bff` + the FASTBuild cache results writeup (`README.md`). |
+| `tools/fastbuild/` | Where `FBuild.exe` goes (gitignored vendor binary; `README.md` has the download steps). |
 | `lessons-learned.md` | Gotchas, same numbered format as `perforce/` and `ci/`. |
 
 ## The compiler situation (resolved 2026-06-03)
@@ -84,7 +87,10 @@ same shape as `ci/lessons-learned.md` #2 (agent had no `p4` binary):
       on this instantiation-bound fixture — *but* it keeps per-TU granularity
       (unlike unity) and is the right lever for declaration-heavy headers.
       lessons-learned #4.
-- [ ] **FASTBuild** as orchestrator (the accelerator the public AAA world
-      documents — Ubisoft et al.).
+- [x] **FASTBuild** as orchestrator — cold build ≈ `/MP` (5.33 s), but its
+      content-addressable **cache** makes a clean build of unchanged code
+      **0.37 s (14×)** and a no-op 0.01 s — the CI-re-run / branch-switch win
+      `/MP`/unity/PCH can't give (plus distribution via `FBuildWorker`). See
+      `samples/fbuild/` + lessons-learned #5.
 - [ ] Linker-time profiling (`/INCREMENTAL`, symbol bloat).
 - [ ] One-page report: numbers, hypotheses, what worked, what didn't.

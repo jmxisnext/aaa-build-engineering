@@ -1,0 +1,39 @@
+// fbuild.bff -- FASTBuild config that compiles the same samples/bench heavy TUs
+// as bench.ps1, so the FASTBuild lever slots into the same comparison as
+// /MP / unity / PCH.
+//
+// Machine-specific toolchain paths + environment are injected by
+// demo-fbuild.ps1 into _generated.bff (gitignored). Run via that script:
+//     pwsh -File ..\..\scripts\demo-fbuild.ps1
+
+#include "_generated.bff"
+
+Settings
+{
+    // FASTBuild gives spawned processes ONLY this environment (hermetic builds),
+    // so cl must be handed its headers, support-DLL PATH, and temp dir here.
+    .Environment =
+    {
+        'PATH=$Env_Path$',
+        'INCLUDE=$Env_Include$',
+        'LIB=$Env_Lib$',
+        'TMP=$Env_Tmp$',
+        'TEMP=$Env_Tmp$',
+        'SystemRoot=$Env_SystemRoot$'
+    }
+    .CachePath = '$CacheDir$'   // content-addressable object cache (the FASTBuild differentiator)
+}
+
+Compiler( 'msvc' )
+{
+    .Executable = '$CL_Exe$'    // FASTBuild infers CompilerFamily=msvc from cl.exe
+}
+
+ObjectList( 'bench' )
+{
+    .Compiler             = 'msvc'
+    .CompilerOptions      = '"%1" /Fo"%2" /c /nologo /EHsc /std:c++17 /O2 "/I$FixtureDir$"'
+    .CompilerInputPath    = '$GenDir$'
+    .CompilerInputPattern = '*.cpp'
+    .CompilerOutputPath   = '$ObjDir$'
+}
