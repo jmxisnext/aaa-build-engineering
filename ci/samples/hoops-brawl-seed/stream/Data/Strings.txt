@@ -1,0 +1,7 @@
+ui.match.start=Tip-off!
+ui.match.win=Game Over — You Win
+ui.match.lose=Game Over — Better Luck Next Quarter
+ui.shotmeter.perfect=Perfect Release!
+ui.shotmeter.good=Good Release
+ui.shotmeter.early=Released Early
+ui.shotmeter.late=Released Late

@@ -1,0 +1,58 @@
+# TeamCity sandbox — Server + one Linux Build Agent.
+#
+# The server is exposed to the Windows host on :8111. The agent talks
+# to the server over the internal compose network at teamcity-server:8111
+# and talks to the Track 1 P4 broker on the Windows host via
+# host.docker.internal:1667. All runtime state lives under ./data/ so
+# the whole stack is `docker compose down -v` reset-able.
+
+services:
+  teamcity-server:
+    image: jetbrains/teamcity-server:${TEAMCITY_VERSION:-latest}
+    container_name: teamcity-server
+    restart: unless-stopped
+    ports:
+      - "8111:8111"
+    volumes:
+      - ./data/teamcity_server/datadir:/data/teamcity_server/datadir
+      - ./data/teamcity_server/logs:/opt/teamcity/logs
+    # Server fetches VCS metadata (changelog views, polling) too —
+    # it also needs to reach the Windows host's p4broker, not just the agent.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      # TeamCity Server 2026.x ships without wget; curl is present.
+      # We deliberately omit -f so a 503 (TeamCity's "first-run wizard
+      # not complete yet" response) still counts as alive — otherwise
+      # the agent's `service_healthy` gate would block until a human
+      # walks the wizard. See lessons-learned.md #1.
+      test: ["CMD-SHELL", "curl -sS http://localhost:8111/ -o /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+
+  teamcity-agent:
+    # Custom image — stock jetbrains/teamcity-agent + Perforce CLI baked in.
+    # Dockerfile lives in ./agent/. The build arg threads our pinned
+    # TEAMCITY_VERSION through to the FROM line so the agent + server
+    # stay on the same release. See ci/lessons-learned.md §2.
+    build:
+      context: ./agent
+      args:
+        TEAMCITY_VERSION: ${TEAMCITY_VERSION:-latest}
+    image: aaa-build-engineering/teamcity-agent:${TEAMCITY_VERSION:-latest}
+    container_name: teamcity-agent
+    restart: unless-stopped
+    depends_on:
+      teamcity-server:
+        condition: service_healthy
+    environment:
+      SERVER_URL: "http://teamcity-server:8111"
+      AGENT_NAME: "agent-linux-01"
+    volumes:
+      - ./data/teamcity_agent/conf:/data/teamcity_agent/conf
+    # Same reason as the server — the agent runs `p4 sync` and friends
+    # against the broker on the Windows host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

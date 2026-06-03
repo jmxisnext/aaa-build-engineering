@@ -1,0 +1,10 @@
+# Seeds - aaa-build-engineering
+
+Parked ideas and associative jumps. Edited as needed.
+Closeout may append here but never overwrites this file.
+
+- [resolved 2026-05-15] ~~Repo name `unreal-unity-cpp` is now mildly misleading — consider renaming before any inbound links exist.~~ → Renamed to `aaa-build-engineering` on 2026-05-15 before Track 1 started.
+- [planted 2026-05-15] If track 4 turns into something substantial, Horde is the strongest signal for a Build Engineer interview — it's the modern Epic-blessed CI and increasingly the industry default for Unreal shops. Worth pushing further than the roadmap suggests.
+- [planted 2026-05-15] An interview-worthy mini-project across all 5 tracks: build a small but real "AAA-shaped" pipeline. Real P4, real CI, real cook, real package, real version stamp, packaged & runnable. Frame the whole repo as the demo.
+- [planted 2026-05-15] `perforce/lessons-learned.md` is by far the highest-leverage artifact in the repo for interview prep — each gotcha doubles as a "tell me about a time" answer. Pattern worth replicating: every track should produce a similarly structured `lessons-learned.md` (numbered incidents → why a build engineer cares → interview-ready TL;DR bullets). Don't make this an afterthought; capture lessons as they happen, not at the end of a track.
+- [planted 2026-05-15] The "custom agent Dockerfile installs missing tool X" pattern is much more general than the p4-binary case from Track 2 lesson #2. The same recipe — `FROM jetbrains/teamcity-agent:latest` + RUN-install-tool — is how you'd add MSVC build tools, FASTBuild, Incredibuild agent, Blender for content cook, Houdini, etc. to an agent image. Track 2 step 3 (sample C++ project) and Track 3 (build acceleration / FASTBuild) both want this pattern. Worth a small `ci/agent/` subdir holding one Dockerfile that grows over time, with each tool-add accompanied by a one-line note in the agent README explaining *why* that tool is there. That doc-as-you-go discipline is the only thing that keeps an agent image from rotting into "we installed X in 2023 and nobody remembers why."

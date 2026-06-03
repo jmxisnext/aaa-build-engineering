@@ -1,0 +1,19 @@
+# Python virtual environments
+**/.venv/
+
+# Extracted P4Python wheels (regeneratable via tools/README.md setup steps)
+**/_p4python_wheels/
+
+# The vendor-distributed P4Python zip (re-downloadable from Perforce)
+**/p4python-*-x64-whl.zip
+
+# Python bytecode
+**/__pycache__/
+*.py[cod]
+
+# OS / editor noise
+Thumbs.db
+.DS_Store
+*.swp
+.vscode/
+.idea/

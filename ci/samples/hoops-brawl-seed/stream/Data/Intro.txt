@@ -1,0 +1,10 @@
+Welcome to Hoops Brawl.
+
+This is a sandbox asset bundled into the seed pak so the Cook Data CI
+stage has real input to operate on. The cooker will pick this file up
+alongside every other .txt under Data/ and write them, in sorted order,
+into a single packed file with an 8-byte magic header and a uint64
+file count.
+
+A future pass replaces this with actual localization tables and intro
+narration text, once the gameplay side catches up.
