@@ -10,10 +10,15 @@ free — MSVC ships gated behind a "Developer Command Prompt." This dir first
 makes the toolchain activatable and *proven*, then layers measured
 acceleration wins on top.
 
+> **Start with [`REPORT.md`](REPORT.md)** — the one-page summary: all four
+> levers measured side by side, the decision framework, and the PCH hypothesis I
+> got wrong and corrected with `/Bt+`.
+
 ## What's here
 
 | Path | What |
 |---|---|
+| `REPORT.md` | **One-page capstone** — all four levers measured, the decision framework, hypotheses (incl. the refuted PCH one). Read this first. |
 | `scripts/activate-msvc.ps1` | Locates the newest MSVC via `vswhere`, imports its `vcvars64` environment into the current PowerShell session. **Dot-source it.** |
 | `scripts/smoke-build.ps1` | Activates the toolchain, compiles + runs `samples/hello`, asserts the output. The "compiler works" proof — exits non-zero on failure, so CI can gate on it. |
 | `scripts/bench.ps1` | Build-acceleration benchmark: compiles N heavy TUs serial / `/MP` / unity / chunked-unity / PCH and prints one before/after table. The reusable harness the Track 3 levers plug into. |
@@ -93,4 +98,5 @@ same shape as `ci/lessons-learned.md` #2 (agent had no `p4` binary):
       `/MP`/unity/PCH can't give (plus distribution via `FBuildWorker`). See
       `samples/fbuild/` + lessons-learned #5.
 - [ ] Linker-time profiling (`/INCREMENTAL`, symbol bloat).
-- [ ] One-page report: numbers, hypotheses, what worked, what didn't.
+- [x] **One-page report** — [`REPORT.md`](REPORT.md): the lever table, decision
+      framework, and hypotheses (incl. the refuted PCH prediction).
