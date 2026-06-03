@@ -11,6 +11,13 @@
 **/__pycache__/
 *.py[cod]
 
+# C++ build artifacts (accel/ samples compile here)
+**/_build/
+*.obj
+*.exe
+*.pdb
+*.ilk
+
 # OS / editor noise
 Thumbs.db
 .DS_Store
