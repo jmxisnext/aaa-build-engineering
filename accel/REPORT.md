@@ -14,9 +14,11 @@ from a hypothesis I got *wrong* and corrected with a measurement (PCH, below).
   (VS 2019 Build Tools), FASTBuild v1.20.
 - **Workload:** 32 translation units, each `#include`-ing one deliberately
   expensive header (`<regex>` + multi-type container instantiation), `/O2`.
-- **Method:** compile-only (`/c`, no link), best-of-3 **cold** reps (object dir
-  wiped before each rep). Reproduce: `bench.ps1` (`/MP`/unity/PCH) and
-  `demo-fbuild.ps1` (FASTBuild). Profiling split: `cl /Bt+`.
+- **Method:** best-of-3 **cold** reps (object dir wiped before each rep).
+  Sections A/B are compile-only (`/c`, no link); section C measures the link
+  separately. Reproduce: `bench.ps1` (`/MP`/unity/PCH), `demo-fbuild.ps1`
+  (FASTBuild), `bench-link.ps1` (linker). Profiling: `cl /Bt+` (compile split),
+  `link /time+` (link passes).
 
 ## Results
 
@@ -39,6 +41,18 @@ from a hypothesis I got *wrong* and corrected with a measurement (PCH, below).
 | clean build, cache **HIT** | 0.37 s | retrieves every `.obj` from cache, no compile |
 | incremental no-op | 0.01 s | dependency check, nothing to do |
 
+**C. The link step** — a *different phase* none of A/B touches. `/MP`, unity,
+PCH, and the cache all speed *compilation*; the link still runs, serially, per
+target — so once compiles are cheap, **the link is the floor on incremental
+iteration.** Fixture: 16,000 symbols, compiled once, only the link varied.
+
+| link config | link time | exe size | what it attacks |
+|---|---|---|---|
+| full `/INCREMENTAL:NO` | 0.081 s | 777 KB | — (baseline) |
+| **incremental** (after 1-symbol edit) | **0.033 s** | 1160 KB | *patch in place* vs re-link (2.45×) |
+| `/OPT:REF,ICF` | 0.112 s | **247 KB** | *dead-strip + fold* — smaller exe, slower link |
+| `/LTCG` (`/GL` objs) | **21.8 s** | 246 KB | *codegen moved to link* (269× — release cost) |
+
 ## What worked, what didn't (the hypotheses)
 
 - **H1 — `/MP` gives ~Nx.** *Partly.* Got 4.0× on 16 *logical* cores, not 16× —
@@ -59,6 +73,15 @@ from a hypothesis I got *wrong* and corrected with a measurement (PCH, below).
   (one unity blob, single-core, beat 8 chunks across 16 cores) because the
   per-TU-*unique* work is tiny here, so there's nothing to parallelize. Holds
   when real per-TU codegen is large.
+- **H5 — link is a separate axis the compile levers can't help.** *Confirmed.*
+  `/INCREMENTAL` patches the exe in place (2.45× faster relink) — but a full link
+  pays the *whole* cost for a one-line change (re-link after a 1-symbol edit ≈
+  from-scratch), which is the incremental linker's reason to exist. Its trade:
+  a fatter binary + incompatibility with `/OPT:REF`/`/OPT:ICF`/`/LTCG` (so it's
+  a *debug* lever). `/LTCG` is the mirror image — `/GL` moves codegen *to* the
+  link (269× slower), the real "why is the release link slow." Symbol count
+  drives both link time and binary size, so DLL-splitting + dead-strip is the
+  structural fix.
 
 ## Decision framework
 
@@ -73,11 +96,19 @@ from a hypothesis I got *wrong* and corrected with a measurement (PCH, below).
    (CI, branch switches, whole team)        switches; shared path = cross-machine)
 4. Cores are the ceiling?                -> FASTBuild distribution (FBuildWorker
                                               = compile farm)
+5. Compiles fast but iteration slow?     -> profile the LINK (link /time+):
+     incremental edit-build-run loop?      -> /INCREMENTAL (debug; not w/ LTCG)
+     release link takes forever?           -> /LTCG codegen-at-link is the cost
+     link slow + binary huge?              -> cut symbol count: split into DLLs,
+                                              /OPT:REF,ICF to dead-strip + fold
 ```
 
 They **compose**: `/MP` is the baseline FASTBuild already does; unity/PCH cut the
 *cold* compile FASTBuild still pays on a cache miss; the cache + farm attack the
-*repeat* builds the others can't. "25 → 12" is layered, not one switch.
+*repeat* builds the others can't; and the **link** (step 5) is a separate phase
+*none* of them touch — once compiles are cheap or cached, the serial link is
+what's left, so it becomes the floor on incremental iteration. "25 → 12" is
+layered across both phases, not one switch.
 
 ## Trade-offs you must name (not just speedups)
 
@@ -88,12 +119,19 @@ They **compose**: `/MP` is the baseline FASTBuild already does; unity/PCH cut th
 - **PCH** is low-risk but only pays off when you're parse-bound.
 - **FASTBuild** is **hermetic** (no inherited env) — you feed it the toolchain
   explicitly; that strictness is what makes its cache keys reproducible.
+- **`/INCREMENTAL`** buys relink speed with a **fatter binary** (padding/thunks)
+  and rules out `/OPT:REF`/`/OPT:ICF`/`/LTCG` — a debug-iteration lever, not
+  release. **`/LTCG`** is the inverse trade: link time for runtime perf.
 
 ## Honest caveat on these numbers
 
 This fixture is *instantiation/codegen-dominated by design* (one heavy template
 header, trivial bodies), which flatters unity and starves PCH. A
 declaration-heavy, unique-code codebase would shift the ranking toward PCH and
-chunked-unity+`/MP`. **That's the whole point of the thesis: measure your own
-split before choosing.** Full per-lever detail: `samples/bench/README.md`,
-`samples/fbuild/README.md`, and `lessons-learned.md` #1–#5.
+chunked-unity+`/MP`. The link section is the mirror caveat — its fixture is
+*symbol-count-dominated by design* (16k trivial functions), so it shows
+`/INCREMENTAL`/`/LTCG`/`/OPT` cleanly but starves `/DEBUG:FASTLINK` (trivial
+debug info). **That's the whole point of the thesis: measure your own split
+before choosing.** Full per-lever detail: `samples/bench/README.md`,
+`samples/fbuild/README.md`, `samples/link/README.md`, and `lessons-learned.md`
+#1–#6.

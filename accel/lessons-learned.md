@@ -264,3 +264,80 @@ where real CI / branch-switch cost lives. Share the cache path and it's
 cross-machine; add FBuildWorker and it's a compile farm. Caveat: it's hermetic,
 so you feed it PATH/INCLUDE/etc. explicitly — the same discipline that makes the
 cache reproducible."*
+
+## 6. Link is a separate phase — none of the compile levers touch it
+
+**What happened:** Lessons #2–#5 are all *compile* levers. But the bench is
+compile-only (`/c`, no link), so it never measured the **link** — the serial,
+per-target step that runs *after* every compile, cached or not. A dedicated
+symbol-bloat fixture (`accel/scripts/bench-link.ps1`: 64 TUs × 250 tiny
+functions = 16,000 symbols, compiled once, then only the link varied) gives:
+
+| config | link(s) | exe(KB) | vs full |
+|---|---|---|---|
+| full `/INCREMENTAL:NO` | 0.081 | 777 | 1.00× |
+| **incremental** (after 1-symbol edit) | **0.033** | 1160 | **2.45× faster** |
+| full re-link (same edit) | 0.083 | 777 | ≈ full |
+| `/OPT:REF` | 0.085 | 373 | ½ the exe, ~free |
+| `/OPT:REF,ICF` | 0.112 | 247 | ⅓ the exe, 1.4× slower |
+| `/LTCG` (`/GL` objs) | **21.79** | 246 | **269× slower** |
+
+**Why each lever does what it does:**
+- **`/INCREMENTAL` patches the existing exe** rather than re-linking from
+  scratch (2.45× faster relink after a one-symbol edit). The first link is still
+  full — it lays down the `.ilk`; only the *next* link is incremental. The cost:
+  a **fatter binary** (1160 vs 777 KB — reserved padding + thunks so the next
+  patch fits) and **incompatibility with `/OPT:REF`/`/OPT:ICF`/`/LTCG`** (ask
+  for those and the linker silently does a full link). Debug-iteration lever,
+  not release.
+- **A full link pays the whole cost for a one-line change** — full re-link after
+  the edit (0.083 s) ≈ from-scratch (0.081 s). Link time is ~independent of how
+  much changed; that's the incremental linker's whole reason to exist.
+- **`/OPT:REF` dead-strips** unreferenced COMDATs (777 → 373 KB, ~free);
+  **`/OPT:ICF` folds** identical-byte COMDATs (373 → 247 KB, at a link-time
+  cost). Smaller binary, but both **disable incremental**.
+- **`/LTCG` moves codegen to link time** (`/GL` objs → the optimizer runs at
+  link): 21.79 s, **269×** the plain link. *This* is "why does our release link
+  take ten minutes," and exactly the cost `/MP` (a compile lever) can't help.
+- **Symbol count drives link time *and* binary size** (sweep: 16k/32k/64k →
+  0.085/0.105/0.153 s, 777/1340/2277 KB). Monolithic targets link slowly; studios
+  split into DLLs and dead-strip to cut the COMDAT count.
+
+**The profiling tool:** `link /time+` is the linker's `cl /Bt+` — per-pass
+timings (Pass 1 symbol resolution 0.080 s, OptIcf 0.025 s, Pass 2 image write
+0.021 s). Profile the link before picking a lever, same discipline as compile.
+
+**Two gotchas hit building it:**
+- **`/INCREMENTAL` needs a warm-up link** to write the `.ilk`; only the *second*
+  link (after a change) is actually incremental. The incremental exe had to be
+  isolated (`app_inc.exe`) so the `/OPT` configs reusing `app.exe` couldn't
+  clobber its incremental state mid-run.
+- **`/DEBUG` flips the `/OPT:REF`/`/OPT:ICF` defaults to NOREF/NOICF** (so debug
+  builds keep all symbols and stay incremental-friendly). You must pass
+  `/OPT:REF` *explicitly* to dead-strip a debug build — so the benchmark sets
+  `/OPT` on every config rather than trusting the defaults to stay put.
+
+**Honest caveat (`/DEBUG:FASTLINK`):** FASTLINK's win is leaving debug info in
+the objs instead of merging the PDB, so it scales with *how much debug info
+there is*. This fixture's is trivial, so FASTLINK ≈ full (0.078 vs 0.081 s). On a
+real multi-GB-PDB codebase it's a large link-time win (trade: the PDB then
+depends on the objs — iteration tool, not shippable). Same shape as the PCH
+caveat in #4: the fixture must *have* the cost for the lever to show it.
+
+**Why a build engineer cares:** "cut the 25-min build to 12" fixates on compile,
+but on a large monolithic target the **link is the serial tail that dominates
+*incremental* iteration** — the edit-build-run loop engineers run all day. Cache
+makes the second *compile* free; it does nothing for the link, which runs every
+time. The link axis is its own set of levers: `/INCREMENTAL` for iteration,
+DLL-splitting + dead-strip to cut symbol count, `/LTCG` reserved for release
+(where you pay link time to buy runtime perf).
+
+**Interview-ready bullet:** *"After /MP and caching make compilation cheap, the
+serial link becomes the floor on incremental iteration — and none of the compile
+levers touch it. /INCREMENTAL patches the exe in place (I measured ~2.5× faster
+relink) at the cost of a fatter binary and incompatibility with /OPT:REF/ICF and
+/LTCG, so it's a debug lever, not release. /LTCG is the opposite — /GL moves
+codegen to link, which is why release links are slow (269× the plain link in my
+bench). Profile with link /time+ (the linker's /Bt+), and split monolithic
+targets into DLLs to cut the symbol count that drives both link time and binary
+size."*

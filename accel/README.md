@@ -10,22 +10,24 @@ free — MSVC ships gated behind a "Developer Command Prompt." This dir first
 makes the toolchain activatable and *proven*, then layers measured
 acceleration wins on top.
 
-> **Start with [`REPORT.md`](REPORT.md)** — the one-page summary: all four
-> levers measured side by side, the decision framework, and the PCH hypothesis I
-> got wrong and corrected with `/Bt+`.
+> **Start with [`REPORT.md`](REPORT.md)** — the one-page summary: all five
+> levers (four compile + the link) measured side by side, the decision
+> framework, and the PCH hypothesis I got wrong and corrected with `/Bt+`.
 
 ## What's here
 
 | Path | What |
 |---|---|
-| `REPORT.md` | **One-page capstone** — all four levers measured, the decision framework, hypotheses (incl. the refuted PCH one). Read this first. |
+| `REPORT.md` | **One-page capstone** — all five levers (four compile + the link) measured, the decision framework, hypotheses (incl. the refuted PCH one). Read this first. |
 | `scripts/activate-msvc.ps1` | Locates the newest MSVC via `vswhere`, imports its `vcvars64` environment into the current PowerShell session. **Dot-source it.** |
 | `scripts/smoke-build.ps1` | Activates the toolchain, compiles + runs `samples/hello`, asserts the output. The "compiler works" proof — exits non-zero on failure, so CI can gate on it. |
 | `scripts/bench.ps1` | Build-acceleration benchmark: compiles N heavy TUs serial / `/MP` / unity / chunked-unity / PCH and prints one before/after table. The reusable harness the Track 3 levers plug into. |
 | `scripts/demo-fbuild.ps1` | FASTBuild lever: builds the same TUs through FASTBuild and measures its cache (clean cache-miss vs cache-HIT vs no-op). |
+| `scripts/bench-link.ps1` | **Linker** lever: the `bench.ps1` sibling for the *link* step. Compiles a 16k-symbol fixture once, then times only the link — `/INCREMENTAL` vs full, `/OPT:REF`/`ICF`, `/LTCG`, a symbol-bloat sweep, and a `link /time+` breakdown. |
 | `samples/hello/` | Smallest program that proves compile + run (prints `_MSC_VER`). |
 | `samples/bench/` | `heavy.h` compile-cost fixture + the `/MP`/unity/PCH results writeup (`README.md`). |
 | `samples/fbuild/` | `fbuild.bff` + the FASTBuild cache results writeup (`README.md`). |
+| `samples/link/` | symbol-bloat fixture (generated) + the linker-profiling results writeup (`README.md`). |
 | `tools/fastbuild/` | Where `FBuild.exe` goes (gitignored vendor binary; `README.md` has the download steps). |
 | `lessons-learned.md` | Gotchas, same numbered format as `perforce/` and `ci/`. |
 
@@ -97,6 +99,12 @@ same shape as `ci/lessons-learned.md` #2 (agent had no `p4` binary):
       **0.37 s (14×)** and a no-op 0.01 s — the CI-re-run / branch-switch win
       `/MP`/unity/PCH can't give (plus distribution via `FBuildWorker`). See
       `samples/fbuild/` + lessons-learned #5.
-- [ ] Linker-time profiling (`/INCREMENTAL`, symbol bloat).
+- [x] **Linker-time profiling** — the link is a *separate phase* no compile
+      lever touches. `/INCREMENTAL` patches the exe in place (**2.45×** faster
+      relink, 0.033 s vs 0.081 s) at the cost of a fatter binary + no
+      `/OPT`/`/LTCG`; `/OPT:REF,ICF` cut the exe ⅓ (777→247 KB); `/LTCG` moved
+      codegen to link (**269× slower**, 21.8 s) — the "why release links are
+      slow" answer. Symbol count drives both link time and size. Profile with
+      `link /time+`. See `samples/link/` + lessons-learned #6.
 - [x] **One-page report** — [`REPORT.md`](REPORT.md): the lever table, decision
       framework, and hypotheses (incl. the refuted PCH prediction).
