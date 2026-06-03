@@ -254,4 +254,125 @@ and pair it with a `-Recreate` mode for idempotency, because the first
 partial-failure run will create half the resources and the second run
 won't know how to patch them up."*
 
+## 5. A second agent only buys you the width of the widest parallel stage
+
+**What happened:** Added a second build agent (`agent-linux-02`) to prove
+the chain runs faster with a pool. Benchmarked it directly
+(`ci/scripts/bench-agents.ps1`): run the chain with agent-02 disabled
+(1 agent), then enabled (2 agents), force `rebuildAllDependencies` both
+times, compare wall-clock.
+
+The chain fans out at Compile into `Smoke Test ‖ Cook Data` (both depend
+only on Compile, both feed Package). Result:
+
+Result (median of 5 A/B trials; `bench-agents.ps1 -Repeat 5`):
+
+| Config | Leaf phase (Smoke‖Cook) | Overlap? | Whole chain |
+|---|---|---|---|
+| 1 agent  | 22s (min 22, max 23, Smoke *then* Cook) | no  | 45s |
+| 2 agents | 11s (min 11, max 11, overlapping)       | yes | 34s |
+
+**2× on the leaf phase, exactly** — two equal ~11s leaves overlapping
+perfectly — and ~24% off the whole chain. These are medians of 5 trials,
+not a single sample: the spread was tiny (1-agent leaf 22–23s, 2-agent leaf
+a dead-flat 11s every run) and the overlap invariant held in all 5 trials,
+so the 2× is reproducible. The 2-agent leaf's zero variance also argues the
+two same-host agent containers aren't contending for CPU — the parallel
+work is overhead-bound (sync + artifact download), exactly what overlaps
+cleanly without more cores. TeamCity load-balanced on its
+own: in the 2-agent run Compile landed on agent-02, then the two leaves
+split across *both* agents. The broker log confirmed agent-02 synced
+through `:1667` with its own per-agent client
+(`james@TC_p4_agent_linux_02_…` running `user-sync …@24` → `[PASS]`),
+so the second agent is a first-class CI citizen, not a bypass.
+
+**Two things a build engineer should take from the numbers:**
+
+1. **Adding agents helps exactly up to the width of the widest parallel
+   stage, and not one agent more.** This DAG is 2-wide at the leaf stage,
+   so the 2nd agent gives full 2× *there* and the 1st-and-only Compile and
+   Package stages (1-wide) are untouched. A *3rd* agent would do nothing
+   for this chain — there is no 3-wide stage to fill. Agent-pool sizing is
+   a question about your build graph's shape, not a "more is always better"
+   knob. You widen the graph (split a monolithic step into parallel ones)
+   *and* add agents together, or the agents idle.
+
+2. **The win is overlap of fixed overhead, and that's representative.**
+   Every build here measured ~11.0s even though the actual
+   compile/test/cook compute on this toy project is sub-second — the 11s
+   is p4 sync through the broker + artifact download + agent handshake,
+   i.e. fixed per-build overhead. That is *exactly* what a second agent
+   overlaps. Real studio builds have far more of this fixed cost (syncing
+   a multi-GB depot, pulling large build artifacts), so the parallel win
+   scales up, not down, on a real workload.
+
+**Why a second agent is a distinct compose service, not `docker compose
+--scale`:** a TeamCity agent persists its identity (GUID +
+`authorizationToken`) in its `conf/` volume. `--scale teamcity-agent=2`
+would point both replicas at the *same* mounted `conf/`, so they'd fight
+over one identity — the server sees one agent flapping, not two. Each
+agent needs its own conf mount (`./data/teamcity_agent` vs
+`./data/teamcity_agent2`) and its own `AGENT_NAME`. Everything else
+(image, server URL, broker route) is identical.
+
+**Interview-ready bullet:** *"A second build agent sped our leaf stage up
+exactly 2× because the chain is 2-wide there — Smoke Test and Cook Data
+both depend only on Compile. The lesson is that agent-pool sizing tracks
+the width of your build graph: a third agent would've done nothing for
+that chain. And note you can't just `docker compose --scale` a TeamCity
+agent — it persists its identity in a conf volume, so two replicas on one
+mount collide; each agent needs its own conf dir and name."*
+
+## 6. The superuser token rotates per process — and a stale one trips the brute-force lockout
+
+**What happened:** Restarted the stopped TeamCity stack and tried to drive
+the REST API. Scraped the superuser token out of `teamcity-server.log`
+right after `docker compose up`, got `6452109178723932359`, and looped on
+`GET /app/rest/server` waiting for the server to come ready. Every call
+came back as the HTML "TeamCity is starting / Initializing server
+components" maintenance page; after ~4 minutes the script declared "NOT
+READY." But the server *was* ready — the log showed it serving REST and
+even printing a *different* token, `4364370803413132753`, over and over.
+
+**Two compounding root causes:**
+
+1. **The token I scraped was stale.** The superuser token is regenerated
+   for each server *process* and printed to the log repeatedly during
+   startup. The log directory is volume-mounted, so it survives restarts
+   and accumulates tokens from *prior* boots. Scraping right after
+   `up` — before the new process had logged its token — grabbed the
+   previous boot's token off the persisted tail. Fix: take the **last**
+   occurrence of the token line, and only after the server is fully
+   initialized.
+
+2. **A stale token tripped TeamCity's brute-force limiter, which then
+   masked the readiness signal.** Each failed auth counts against a
+   per-username limit (here the empty superuser username): *"You made 5
+   failed login attempts in 1m … you will be able to login only in 20s."*
+   My tight poll loop generated failures faster than that, so the server
+   started *rejecting even a correct token* during the cooldown windows —
+   and the rejections look identical to "not ready yet." The probe was
+   creating the failure it was probing for.
+
+**Fix:** Scrape the token with `… | tail -n 1` (last line) *after* the
+server has finished initializing (REST returns JSON, not the 503
+maintenance page), and never tight-loop auth — back off on failure so a
+wrong/early token doesn't burn the rate-limit budget. `bench-agents.ps1`'s
+`Get-SuperUserToken` takes the last occurrence for exactly this reason.
+
+**Why a build engineer cares:** automation against a freshly-(re)started
+server hits two traps at once — (a) credentials that rotate on restart,
+read from a log that outlives the restart, and (b) security controls
+(login throttling) that turn a benign retry loop into a self-inflicted
+outage that's misdiagnosed as "server slow to boot." Both are classic
+"works the first time, mysteriously fails on the automated retry" CI bugs.
+
+**Interview-ready bullet:** *"TeamCity's superuser token rotates per
+server process and is logged repeatedly into a volume-persisted log, so a
+scrape right after restart can grab a stale token from a prior boot — take
+the last occurrence, after init completes. And don't tight-loop auth while
+waiting for readiness: failed logins hit the brute-force limiter, and the
+resulting lockout rejects even a correct token, so your readiness probe
+manufactures the failure it's checking for. Back off on auth failure."*
+
 

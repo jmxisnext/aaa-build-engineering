@@ -13,9 +13,11 @@ That's how studios actually wire CI: through the policy layer, not around it.
 
 | Path | Purpose |
 |---|---|
-| `docker-compose.yml` | TeamCity Server + one Linux Build Agent, networked together |
+| `docker-compose.yml` | TeamCity Server + **two** Linux Build Agents, networked together |
 | `.env` | `TEAMCITY_VERSION` pin (default `latest` until a known-good is identified) |
 | `data/` | Server DB, agent conf, logs — all gitignored, all regenerable |
+| `scripts/bootstrap-builds.ps1` | Idempotent REST bootstrap of the 4-config build chain |
+| `scripts/bench-agents.ps1` | Measure chain wall-clock with 1 vs 2 agents (parallelism demo) |
 | `lessons-learned.md` | Track 2 incident log (same pattern as `perforce/lessons-learned.md`) |
 
 ## Bring up / tear down
@@ -77,11 +79,49 @@ the command if it really came through the broker.
   that; the agent waits on `service_healthy` before starting.
 - **Don't commit `data/`.** Already gitignored.
 
+## Agent pool — parallelism benchmark
+
+The build chain fans out at Compile into `Smoke Test ‖ Cook Data` (both
+depend only on Compile, both feed Package). With one agent those two
+leaves serialize; with two they run concurrently. `scripts/bench-agents.ps1`
+measures the difference directly — it runs the chain with agent-02 disabled,
+then enabled, forcing `rebuildAllDependencies` both times:
+
+```powershell
+# stack must be up; run a warmup chain first so caches are warm
+pwsh -File .\scripts\bench-agents.ps1
+```
+
+Measured result — **median of 5 A/B trials** (2026-06-03, `latest` =
+TeamCity 2026.1):
+
+| Config | Leaf phase (Smoke‖Cook) | Overlap? | Whole chain |
+|---|---|---|---|
+| 1 agent  | 22s (min 22, max 23) | no  | 45s |
+| 2 agents | 11s (min 11, max 11) | yes | **34s** |
+
+**2× on the leaf phase** (two equal ~11s leaves overlapping), ~24% off the
+whole chain — and the pattern held in **all 5 trials**: 1-agent never
+overlapped, 2-agent always did, and the 2-agent leaf span was a dead-flat
+11s every trial (zero variance — it's one overhead-bound build either way,
+just parallelized). That flatness also rules out CPU contention between the
+two same-host agent containers; if they were fighting over cores the
+2-agent leaf would have crept up under load. Two caveats that make this
+honest rather than a vanity number:
+the ~11s/build is fixed overhead (p4 sync through the broker + artifact
+download + agent handshake), not the toy project's sub-second compute — but
+that overhead is *exactly* what a second agent overlaps, and it only grows
+on a real depot. And a *third* agent would buy nothing here: the DAG is only
+2-wide at its widest stage. See `lessons-learned.md` §5.
+
 ## What this stack does not do yet
 
 - No external DB (HSQLDB only — sandbox-tier).
-- One agent only, Linux only. C++ MSBuild work on Windows will need a separate
-  native Windows agent registered against the same server (deferred until the
-  sample project is in place — see roadmap track 2 step 3).
+- Two Linux agents, no native Windows agent yet. C++ MSBuild work on Windows
+  will need a separate native Windows agent registered against the same
+  server (deferred — the current chain builds the C++ seed with gcc/CMake on
+  Linux).
+- Builds are manual / dependency-triggered only — no VCS-change trigger wired
+  yet, so a P4 submit through the broker does not auto-fire the chain.
 - No HTTPS / reverse proxy. Production would front this with nginx + a real
   cert.

@@ -56,3 +56,32 @@ services:
     # against the broker on the Windows host.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  # Second build agent. Deliberately a distinct service, NOT `--scale`:
+  # a TeamCity agent persists its identity (GUID + authorizationToken) in
+  # its conf/ volume, so two agents sharing one conf mount would collide
+  # on identity. Each agent gets its own conf dir (./data/teamcity_agent2)
+  # and its own AGENT_NAME. Everything else is identical to agent-01 — same
+  # custom image (p4 + C++ toolchain baked in), same server, same broker.
+  #
+  # Why a second agent: the build chain fans out at Compile into
+  # Smoke Test || Cook Data. With one agent those two leaves serialize;
+  # with two they run concurrently. See ci/lessons-learned.md §5.
+  teamcity-agent-02:
+    build:
+      context: ./agent
+      args:
+        TEAMCITY_VERSION: ${TEAMCITY_VERSION:-latest}
+    image: aaa-build-engineering/teamcity-agent:${TEAMCITY_VERSION:-latest}
+    container_name: teamcity-agent-02
+    restart: unless-stopped
+    depends_on:
+      teamcity-server:
+        condition: service_healthy
+    environment:
+      SERVER_URL: "http://teamcity-server:8111"
+      AGENT_NAME: "agent-linux-02"
+    volumes:
+      - ./data/teamcity_agent2/conf:/data/teamcity_agent/conf
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
