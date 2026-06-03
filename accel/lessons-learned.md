@@ -63,3 +63,34 @@ means 'not activated,' not 'not installed.' Locate it with vswhere, replay
 the vcvars environment into your shell, and make the CI build step do the
 activation rather than trusting a developer's pre-warmed Developer Command
 Prompt. Pin the toolchain version for reproducibility."*
+
+## 2. `/MP` gives a real but sub-linear speedup — know why it's not N×
+
+**What happened:** Compiling 16 deliberately-heavy TUs went **10.02 s → 2.54 s**
+just by adding `/MP` — a **3.94×** speedup on a 16-logical-core box, with no
+code change. Stable across reps (serial 10.34/10.02/10.05; parallel
+2.54/2.54/2.58), so it's a real number, not a lucky run. Reproduce with
+`accel/scripts/demo-mp.ps1`.
+
+**Why not 16×** (this is the actual interview question):
+- **16 *logical* cores ≈ 8 physical + hyperthreading.** Compilation is
+  compute- and memory-bandwidth-bound; HT siblings don't add a full core.
+- **`/MP` parallelizes the TUs inside one `cl` process** — the front-end
+  distributing work and the per-`.obj` writes are not parallel.
+- **Each TU re-parses the same `heavy.h` independently** (no PCH). Parallelism
+  *hides* that redundant work but doesn't eliminate it.
+
+**Why a build engineer cares:** `/MP` is the cheapest real win on MSVC (one
+flag) and the first thing to reach for. But the follow-up — "you got 4× on 16
+cores, why not more?" — is also the roadmap for the *next* wins: **PCH** and
+**unity/jumbo builds** remove the redundant header parsing that `/MP` only
+parallelizes. And `/MP` (parallel *within* a project) is orthogonal to MSBuild
+`/m` (parallel *across* projects) — real builds enable both, and conflating
+them is a common misconfiguration (e.g. `/m` × `/MP` oversubscribing cores).
+
+**Interview-ready bullet:** *"`/MP` is a one-flag ~4× on a 16-core box — but
+not 16×, because half those cores are hyperthreads, the `cl` front-end and obj
+writes aren't parallel, and every TU still re-parses the same headers. That
+last point is why PCH and unity builds are the next lever: `/MP` parallelizes
+the redundant header work; PCH eliminates it. And keep `/MP` (within-project)
+distinct from MSBuild `/m` (across-project) so you don't oversubscribe cores."*

@@ -70,9 +70,11 @@ same shape as `ci/lessons-learned.md` #2 (agent had no `p4` binary):
 
 ## Next (Track 3 roadmap — measured wins layer on the foundation)
 
-- [ ] **`/MP` parallel compilation** — measure serial vs parallel `cl` on a
-      multi-TU build. The first free win.
-- [ ] **Unity / jumbo build** vs per-TU compilation.
+- [x] **`/MP` parallel compilation** — **3.94× (10.02 s → 2.54 s)**, 16 TUs
+      on 16 logical cores. The first free win (one flag). See
+      `samples/mp-demo/` + lessons-learned #2.
+- [ ] **Unity / jumbo build** vs per-TU compilation — removes the redundant
+      per-TU header parsing that `/MP` only *parallelizes* (next).
 - [ ] **PCH** review — is the precompiled header doing real work?
 - [ ] **FASTBuild** as orchestrator (the accelerator the public AAA world
       documents — Ubisoft et al.).
