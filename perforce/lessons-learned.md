@@ -90,6 +90,34 @@ Real-world gotchas hit during the sandbox build-out. Each is the kind of thing a
 
 **Why a build engineer cares:** This is the second-most-common Perforce confusion after read-only-during-resolve. Engineers think their files vanished. They didn't — they're sitting in the pending changelist, which `p4 changes -s pending` will show.
 
+## 11. Broker allowlist = ordered first-match rules; anchor the user regex
+
+**What happened:** The code-freeze rule (`command: ^submit$ { action = reject; }`) blocked *everyone*, including the `buildagent` CI identity. During Track 2 that forced a broker *bypass* — submitting straight to p4d on `:1666` — to seed the depot. It worked, but the submit then never appeared in `broker.log` (see `../ci/lessons-learned.md` #3: "the broker is a router, not a journal").
+
+**Fix:** Add a service-account allow rule *before* the reject. Broker command handlers are first-match-wins, so ordering is the whole mechanism:
+
+```
+command: ^submit$           # evaluated first
+{
+    user   = ^(buildagent|build-svc|infra-svc)$;
+    action = pass;
+}
+command: ^submit$           # only reached if the user didn't match above
+{
+    action = reject;
+}
+```
+
+Two gotchas:
+- **Order matters.** Put the reject first and the allow rule is dead code — every submit is rejected before the allow is ever consulted.
+- **Anchor the user regex.** `user = build-svc;` is unanchored — it also matches `build-svc-test`, `not-build-svc`, etc. Use `^(...)$`, the same discipline as the command pattern (`^submit$`, not bare `submit`).
+
+**Verified:** through the broker, `buildagent` and `build-svc` submits log `Config: [PASS] / Action: [PASS]` and reach p4d (which replies `No files to submit from the default changelist` — a p4d-only message, proving traversal); `james` logs `[REJECT]` and gets the freeze message from the broker itself.
+
+**Why a build engineer cares:** This is how you reconcile two requirements that look contradictory — "freeze all submits" and "the build pipeline must keep submitting." The exemption belongs in *policy* (versioned, reviewable, logged), not in an operator remembering to bypass. And because allowed submits PASS *through* the broker, they stay in `broker.log` — closing the audit-trail gap that bypassing opened.
+
+**Interview-ready bullet:** *"A broker freeze that blocks everyone forces people to bypass the broker, which destroys your audit trail. The fix is an ordered allowlist — service-account `pass` rule before the blanket `reject`, anchored user regex — so automation keeps moving AND every submit decision still lands in the broker log."*
+
 ---
 
 ## TL;DR — interview-ready bullets
@@ -107,3 +135,4 @@ These are the kinds of one-liners a build engineer interviewee should be able to
 - "Broker command patterns are regex — bare `submit` would also match `submitlist` etc. Anchor with `^submit$`."
 - "Broker `redirection = selective` (default) prevents replication-lag bugs in GUIs by sticking a session to master once a write touches it; `pedantic` always reroutes per-command rule. Production usually wants selective for interactive sessions and pedantic for scripted workloads against replicas."
 - "Proxy = file-content cache; broker = command-level policy; replica = read-mostly mirror; edge server = local-write replica that forwards submits. Real studios run all four."
+- "A broker freeze that blocks everyone forces an audit-destroying bypass. Reconcile 'freeze' with 'CI must keep submitting' via an *ordered* service-account allowlist — a `pass` rule (anchored user regex) before the blanket `reject` — so allowed submits stay in `broker.log`."

@@ -19,7 +19,7 @@ Why this matters for a build engineer: most "operational rules" a studio wants t
 | Rule | Behavior | Why this policy is realistic |
 |---|---|---|
 | Reject `obliterate` | Returns a custom rejection message | Obliterate permanently deletes file history. Real shops route it through an approval workflow and use a broker to enforce "no direct obliterates." |
-| Reject `submit` | Returns a "code freeze" message | Simulates a maintenance window. Production usage: blocks submits during nightly build runs, release weeks, integration test windows. Real shops parameterize this with a service-account allowlist (e.g., `user` regex `^buildbot$` is the inverse) so automation can still progress. |
+| Reject `submit` *(except allowlisted service accounts)* | Freeze message to humans; PASSes `buildagent` / `build-svc` / `infra-svc` through to p4d | Simulates a maintenance window (nightly builds, release weeks, integration windows). A service-account allowlist lets automation keep submitting *and stay in the audit log* while humans are frozen out. See "Service-account allowlist" below. |
 
 ## Running it
 
@@ -48,12 +48,56 @@ The four checks that proved the broker is doing what it should:
 
 Demo 4 is the critical observation: **the broker log is policy telemetry.** Postmortem question "who tried to obliterate //engine/Code/SafetySystem.cpp last Tuesday?" — answer is in this log.
 
-## Real-world hardening (deferred)
+## Service-account allowlist (hardening — 2026-06-03)
+
+The original freeze rule rejected *every* `submit`, including automation. That's the gap documented in [`../../ci/lessons-learned.md`](../../ci/lessons-learned.md) #3: during the Track 2 bring-up the only way to land the seed changelist was to **bypass the broker** (connect to p4d directly on `:1666`). A bypassed submit succeeds at the depot but never appears in `broker.log` — the audit signal the broker exists to capture is silently lost.
+
+The fix is a first-match-wins allowlist (`p4broker.conf`, Policy 2): an allow rule for service accounts placed *before* the blanket reject.
+
+```
+command: ^submit$
+{
+    user    = ^(buildagent|build-svc|infra-svc)$;   # anchored — see lessons-learned #11
+    action  = pass;
+}
+command: ^submit$
+{
+    action  = reject;
+    message = "Code freeze ...";
+}
+```
+
+### Before / after
+
+| User | Before (blanket reject) | After (allowlist) |
+|---|---|---|
+| `james` (human dev) | REJECT | REJECT — freeze still applies |
+| `buildagent` (CI agent) | REJECT ← the gap | **PASS** → reaches p4d, logged |
+| `build-svc` (infra) | REJECT | **PASS** → reaches p4d, logged |
+
+Proof the allowlisted submit actually traverses the broker: as `buildagent` the command returns `No files to submit from the default changelist.` — a message that can only come from **p4d**. A blocked user never gets that far; they get the freeze message from the broker itself.
+
+### The audit trail is now intact
+
+Every submit *decision* lands in `broker.log`, allowlisted ones included (machine name scrubbed to `ws01`):
+
+```
+... pid 13200 james@ws01-main       'user-submit -d ...' Config: [REJECT]  Action: [REJECT]
+... pid 27608 buildagent@ws01-main   'user-submit -d ...' Config: [PASS]    Action: [PASS]
+... pid 26448 build-svc@ws01-main    'user-submit -d ...' Config: [PASS]    Action: [PASS]
+```
+
+Before the allowlist, an infra submit during a freeze left *no* broker-side record (it bypassed to `:1666`). Now it's both allowed and logged — the exemption lives in policy, not in an operator's memory of when to bypass.
+
+## Real-world hardening
+
+**✅ Implemented — service-account allowlist on `submit`** (see section above). The freeze rule no longer blocks *everyone*; `buildagent` / `build-svc` / `infra-svc` PASS through and stay in `broker.log`, closing the audit-trail gap from `../../ci/lessons-learned.md` #3.
+
+**Still deferred:**
 
 | Hardening | Why |
 |---|---|
 | `policies.d/` directory of include files | Each policy lives in its own file, owned by a different team. CI validates them on PR. |
-| Service-user allowlist on `submit` rule | The current rule blocks *everyone*. Production should allow `buildbot` so automation continues during freeze. |
 | `redirection = pedantic` for replica-bound commands | Default `selective` is the right choice for interactive users; pedantic is the right choice for write-amplifying scripts running against read-only replicas. |
 | Filter-mode handlers (action = filter) | Lets the broker invoke a Python script for complex policies — e.g., "submit allowed during freeze IF jira ticket in description IS in approved state." |
 | Multiple brokers, load-balanced | A single broker is a single point of failure. Production typically runs 3+ brokers behind a TCP load balancer. |
