@@ -1,24 +1,23 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 39e603b - accel(track3): /MP parallel-compilation benchmark -- first measured win (3.94x)
+Branch: main   |   Last commit: a5fab0a - accel(track3): consolidate into one acceleration benchmark; add unity/jumbo lever
 
 **This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. Full pre-public dev history is in the local `localbak` mirror. Commits here carry **no co-author trailer** (matches the public release).
 
-## What was just built
-- `39e603b` **Track 3 - /MP benchmark (first measured acceleration win).** `accel/scripts/demo-mp.ps1` compiles 16 heavy TUs serial vs `/MP`: **10.02s -> 2.54s = 3.94x** on 16 logical cores, stable across reps. `accel/samples/mp-demo/` + lessons-learned #2 (why ~4x not 16x: HT, non-parallel front-end, redundant header parsing -> points at PCH/unity next).
-- `191bb3f` **Track 3 started - MSVC toolchain made activatable.** The "compiler situation" was activation, not acquisition (VS2019 BuildTools cl 19.29 + VS2017 Community cl 19.16 both installed, gated behind vcvars). `accel/scripts/activate-msvc.ps1` (vswhere -latest -> vcvars replay into the PS session) + `smoke-build.ps1` (compile+run+assert, CI-gateable). lessons-learned #1.
-- `049bfcc` **Track 1 - broker service-account allowlist (hardening DONE).** Ordered `user = ^(buildagent|build-svc|infra-svc)$` PASS rule before the blanket freeze reject. Closes the audit-trail gap from `ci/lessons-learned.md` #3: automation now submits *through* the broker (logged) instead of bypassing to `:1666` (invisible). Verified james->REJECT, buildagent/build-svc->PASS->p4d, all logged. broker/README + perforce/lessons-learned #11.
+## What was just built (2026-06-03)
+- `a5fab0a` **Track 3 - unity/jumbo lever + consolidated benchmark.** Superseded `demo-mp.ps1` with `accel/scripts/bench.ps1` (renamed fixture `samples/mp-demo` -> `samples/bench`). One table, four configs, 32 TUs / 16 cores: serial 20.22s · `/MP` 4.98s (4.06x) · **unity 0.73s (27.7x)** · unity×8+`/MP` 1.49s (13.57x). Finding: unity *single-core* beats chunked-unity-across-16-cores because this fixture is header-parse-dominated (eliminating redundant work > parallelizing it). Docs are explicit about that fixture bias + unity's real costs (incremental granularity, ODR). lessons-learned #3.
+- `39e603b`/`191bb3f` **Track 3 foundation.** MSVC made activatable (`activate-msvc.ps1` vswhere->vcvars replay; `smoke-build.ps1`); the "compiler situation" was activation not acquisition (VS2019 BuildTools cl 19.29 selected). lessons-learned #1-2.
+- `049bfcc` **Track 1 - broker service-account allowlist (hardening DONE).** Ordered PASS rule before the freeze reject closes the audit-trail gap from `ci/lessons-learned.md` #3; automation submits *through* the broker (logged). perforce/lessons-learned #11.
+
+**Sandbox infra was left RUNNING** earlier this session: p4d on :1666, broker on :1667. Stop with `perforce\broker\stop-broker.ps1` then `perforce\scripts\stop-p4d.ps1`.
 
 ## Live edge
-Track 1 broker is hardened (allowlist + audit gap closed). Track 3 is live: activatable MSVC toolchain + one measured acceleration result, with the next levers teed up by the `/MP` "why not 16x" analysis. The `accel/scripts/demo-mp.ps1` timing/reporting pattern generalizes into a reusable acceleration measurement harness (see SEEDS.md 2026-06-03) - each remaining lever is the same harness with one variable changed.
-
-**Sandbox infra was left RUNNING** this session: p4d on :1666, broker on :1667. Stop with `perforce\broker\stop-broker.ps1` then `perforce\scripts\stop-p4d.ps1` if you want them down.
+Track 1 broker hardened. Track 3 has the toolchain + two measured levers (`/MP`, unity) in one reusable benchmark harness (`bench.ps1`). The harness is built to plug in the remaining levers with ~one new config block each.
 
 ## Next
-Pick one (all are next-step menu items, not a forced path):
-1. **Track 3 - unity/jumbo build measurement** (extends `demo-mp.ps1`): concatenate the N TUs into one and re-time vs per-TU + `/MP`. Closes the "why not 16x" loop with data by removing the redundant header parsing. Then PCH (`/Yc` once + `/Yu`), then FASTBuild (needs a portable binary download, ~30 min).
-2. **Track 1 - `policies.d/` modular policy assembly** (broker/README "Real-world hardening" still-deferred list).
-3. **Track 2 - second build agent** to actually parallelize the Smoke||Cook DAG fork (needs Docker Desktop, which was down this session).
+1. **Track 3 - PCH lever** (extends `bench.ps1`): add a `PCH` config - `/Yc` to build `heavy.h` into a .pch once, `/Yu` per TU to consume it. The interesting comparison is PCH-per-TU+`/MP` vs unity: PCH should let `/MP` approach unity's speed *without* unity's incremental-granularity / ODR costs. That contrast is the strongest interview point in the track.
+2. Then **FASTBuild** as orchestrator (needs a portable binary download, ~30 min), then linker-time profiling, then the one-page report.
+3. **Or switch tracks:** Track 1 `policies.d/` modular policy assembly; Track 2 second build agent (needs Docker Desktop, down this session).
 
-First action whichever path: `. .\accel\scripts\activate-msvc.ps1` to get `cl` on PATH, and if infra was stopped, `perforce\scripts\start-p4d.ps1` -> `perforce\broker\start-broker.ps1` -> verify `p4 -p localhost:1667 info`.
+First action whichever path: `. .\accel\scripts\activate-msvc.ps1` to get `cl` on PATH, then `pwsh -File .\accel\scripts\bench.ps1` to reproduce the table.
