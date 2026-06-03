@@ -72,15 +72,18 @@ same shape as `ci/lessons-learned.md` #2 (agent had no `p4` binary):
 
 ## Next (Track 3 roadmap — measured wins layer on the foundation)
 
-- [x] **`/MP` parallel compilation** — one flag, **4.06×** (20.22 s → 4.98 s,
+- [x] **`/MP` parallel compilation** — one flag, **3.97×** (20.27 s → 5.10 s,
       32 TUs / 16 cores). *Parallelizes* the redundant work.
-- [x] **Unity / jumbo build** — **27.7×** (→ 0.73 s) by parsing the shared
-      header *once* instead of N times. *Eliminates* the redundant work — and
-      on this header-parse-dominated fixture it beats `/MP` and even
-      chunked-unity+`/MP` (single core, 0.73 s, vs 8 chunks across 16 cores,
-      1.49 s). See `samples/bench/` + lessons-learned #3 (fixture bias +
-      unity's real costs: incremental granularity, ODR).
-- [ ] **PCH** review — is the precompiled header doing real work?
+- [x] **Unity / jumbo build** — **28.2×** (→ 0.72 s) by compiling the shared
+      template machinery *once* instead of per-TU. *Eliminates* redundant
+      instantiation + codegen — beats `/MP` and chunked-unity outright here
+      (1 core 0.72 s vs 8 chunks/16 cores 1.49 s). See `samples/bench/` +
+      lessons-learned #3 (incl. fixture bias + unity's real costs).
+- [x] **PCH** — **4.64×** (warm). Caches the *parse* only, not instantiation or
+      `/O2` codegen (`/Bt+` showed per-TU ≈ 50 % each), so it barely beat `/MP`
+      on this instantiation-bound fixture — *but* it keeps per-TU granularity
+      (unlike unity) and is the right lever for declaration-heavy headers.
+      lessons-learned #4.
 - [ ] **FASTBuild** as orchestrator (the accelerator the public AAA world
       documents — Ubisoft et al.).
 - [ ] Linker-time profiling (`/INCREMENTAL`, symbol bloat).

@@ -66,8 +66,8 @@ Prompt. Pin the toolchain version for reproducibility."*
 
 ## 2. `/MP` gives a real but sub-linear speedup — know why it's not N×
 
-**What happened:** Compiling 32 deliberately-heavy TUs went **20.22 s → 4.98 s**
-just by adding `/MP` — a **4.06×** speedup on a 16-logical-core box, with no
+**What happened:** Compiling 32 deliberately-heavy TUs went **20.27 s → 5.10 s**
+just by adding `/MP` — a **3.97×** speedup on a 16-logical-core box, with no
 code change. Stable across cold reps, so it's a real number, not a lucky run.
 Reproduce with `accel/scripts/bench.ps1` (the `/MP (per-TU)` row).
 
@@ -101,28 +101,34 @@ distinct from MSBuild `/m` (across-project) so you don't oversubscribe cores."*
 
 | config | best | vs serial |
 |---|---|---|
-| serial (per-TU) | 20.22 s | 1.00× |
-| `/MP` (per-TU) | 4.98 s | 4.06× |
-| **unity (1 file)** | **0.73 s** | **27.70×** |
-| unity ×8 + `/MP` | 1.49 s | 13.57× |
+| serial (per-TU) | 20.27 s | 1.00× |
+| `/MP` (per-TU) | 5.10 s | 3.97× |
+| **unity (1 file)** | **0.72 s** | **28.15×** |
+| unity ×8 + `/MP` | 1.49 s | 13.60× |
 
-The surprise: **unity on a single core (0.73 s) beat unity-chunked across 16
-cores (1.49 s), and crushed `/MP` (4.98 s).**
+The surprise: **unity on a single core (0.72 s) beat unity-chunked across 16
+cores (1.49 s), and crushed `/MP` (5.10 s).**
 
-**Why:** `/MP` parallelizes the work; unity *removes* it. Each per-TU compile
-re-parses `<regex>` (the dominant cost here) — 32 times. A unity build
-`#include`s all 32 TUs into one file, so `#pragma once` makes `heavy.h` parse
-**once**. When the bottleneck is redundant parsing, doing it once on one core
-beats doing it 8× across cores (chunked unity) or 32× across cores (`/MP`).
-The "obvious" sweet spot (chunk *and* parallelize) only wins when there's
-enough *per-TU* work to parallelize — which is the caveat.
+**Why:** `/MP` parallelizes the work; unity *removes* it. The redundant cost
+isn't only parsing `heavy.h` — `/Bt+` puts a per-TU compile at ~50 % front-end
+(parse + template instantiation, ~0.35 s) and ~50 % back-end (`/O2` optimize +
+codegen, ~0.36 s). Every per-TU build re-instantiates and re-optimizes the same
+STL template machinery (`std::regex`, the `map_churn<...>` instantiations) — 32
+times. A unity build `#include`s all 32 TUs into one compile, so that shared
+machinery is instantiated and optimized **once**. When the bottleneck is
+redundant work, doing it once on one core beats doing it 8× across cores
+(chunked unity) or 32× across cores (`/MP`). The "obvious" sweet spot (chunk
+*and* parallelize) only wins when the *per-TU-unique* work is big enough to
+parallelize — here it's tiny, so plain unity wins outright.
 
-**The caveat that makes this honest:** the fixture is *header-parse-dominated
-by design* (trivial TU bodies). Real code has substantial per-TU codegen that
-`/MP` and chunked-unity genuinely parallelize, so on a real codebase the
-ranking shifts back toward chunked-unity+`/MP`. The transferable skill is not
-"unity wins" — it's **profile where the time goes, then pick the lever that
-attacks that cost.**
+**The caveat that makes this honest:** the fixture's redundant cost is template
+instantiation + optimization (proven in lesson #4 — PCH, which removes the
+*parse* but not the instantiation/codegen, barely helped). Real code has
+substantial *per-TU-unique* codegen that `/MP` and chunked-unity genuinely
+parallelize, so on a real codebase the ranking shifts back toward
+chunked-unity+`/MP`. The transferable skill isn't "unity wins" — it's **profile
+where the time goes (`/Bt+`, `/d2cgsummary`), then pick the lever that attacks
+that cost.**
 
 **Unity's real costs** (not hit here — the fixture is collision-free by
 construction):
@@ -139,10 +145,69 @@ a few heavy headers are included everywhere (the common AAA case), but it
 trades away incremental speed and can expose ODR bugs — so you tune chunk size
 rather than going all-in on one blob.
 
-**Interview-ready bullet:** *"On a header-parse-dominated build a unity build
-gave ~28× by parsing the shared header once instead of per-TU — beating `/MP`'s
-4× outright, because eliminating redundant work beats parallelizing it. But
-that's fixture-specific: real per-TU codegen parallelizes, so you tune unity
-*chunk size* (clean-build speed vs incremental granularity) and watch for the
-ODR violations unity surfaces. The real skill is profiling where build time
-goes before reaching for a lever."*
+**Interview-ready bullet:** *"On a build dominated by redundant template
+instantiation, a unity build gave ~28× by compiling the shared STL machinery
+once instead of per-TU — beating `/MP`'s 4× outright, because eliminating
+redundant work beats parallelizing it. But that's fixture-specific: real
+per-TU-unique codegen parallelizes, so you tune unity *chunk size* (clean-build
+speed vs incremental granularity) and watch for the ODR violations unity
+surfaces. The real skill is profiling where build time goes (`/Bt+`) before
+reaching for a lever."*
+
+## 4. PCH caches the *parse*, not instantiation or codegen — know what your time is
+
+**What happened:** Adding a precompiled header to the same benchmark barely
+moved the needle:
+
+| config | best | vs serial |
+|---|---|---|
+| `/MP` (per-TU) | 5.10 s | 3.97× |
+| PCH clean + `/MP` | 4.61 s | 4.40× |
+| PCH warm + `/MP` | 4.37 s | 4.64× |
+| unity (1 file) | 0.72 s | 28.15× |
+
+I expected PCH+`/MP` to approach unity (both "parse the header once"). It
+didn't — PCH landed barely above plain `/MP`, ~6× short of unity. ("warm" =
+the `.pch` is prebuilt and reused, the realistic steady state; "clean" rebuilds
+it inside the timed region.)
+
+**Why (this corrects lesson #3's first guess):** `/Yc` compiles the prefix
+header into a `.pch` that caches the **parsed declaration state**; `/Yu` TUs
+reuse it and skip *re-parsing* `heavy.h`. But:
+- **Template *instantiation* is not cached.** `map_churn<int,long long>`,
+  `std::regex`'s internals, etc. are instantiated where *used* — in every TU —
+  and that work stays.
+- **Back-end optimization is not cached at all.** `/Bt+` put a per-TU compile
+  at ~0.35 s front-end + ~0.36 s back-end; PCH shaves only part of the front
+  end (the parse), leaving the instantiation half of the front end *and* the
+  whole `/O2` back end to repeat per TU.
+
+So PCH removed only the ~14 % of `/MP`'s time that was pure parsing (5.10 →
+4.37 warm). unity removed the redundant instantiation **and** optimization by
+compiling the shared machinery once — hence 28×.
+
+**The real-world flip — why PCH is still a top lever:** this fixture is
+unusual. Its expensive header is *template-definition* heavy and each TU
+*instantiates* those templates, so the cost PCH can't cache (instantiation +
+codegen) dominates. Most real PCH wins come from *declaration*-heavy headers
+(`<Windows.h>`, big framework umbrellas) that every TU parses but doesn't
+re-instantiate — there PCH cancels enormous, genuinely-redundant parse cost.
+And critically, PCH keeps **per-TU compilation**, so `/MP` parallelism *and*
+incremental rebuilds both survive — whereas unity sacrifices both. Honest
+framing: *unity* trades incremental granularity for the biggest clean-build
+win; *PCH* speeds builds **without** that trade — when your cost is parse, not
+instantiation.
+
+**Why a build engineer cares:** "add a PCH" is folk wisdom; whether it helps
+depends entirely on whether your build is parse-bound. The discipline is to
+*measure the split* (`/Bt+` front-end vs back-end, `/d2cgsummary` for back-end
+detail) before choosing — PCH for parse-bound, unity/jumbo for
+instantiation-bound, `/MP` for the free parallel baseline, and the three
+compose.
+
+**Interview-ready bullet:** *"I expected PCH to rival unity since both parse the
+header once — but PCH got ~4.4× vs unity's 28×, because PCH caches parsed
+declarations, not template instantiation or `/O2` codegen, and `/Bt+` showed my
+per-TU cost was ~50 % back-end. PCH attacks parse cost and keeps per-TU
+granularity; unity attacks redundant instantiation+codegen but merges TUs.
+Measure the front/back split before reaching for one."*
