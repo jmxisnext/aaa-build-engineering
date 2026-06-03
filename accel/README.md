@@ -16,7 +16,9 @@ acceleration wins on top.
 |---|---|
 | `scripts/activate-msvc.ps1` | Locates the newest MSVC via `vswhere`, imports its `vcvars64` environment into the current PowerShell session. **Dot-source it.** |
 | `scripts/smoke-build.ps1` | Activates the toolchain, compiles + runs `samples/hello`, asserts the output. The "compiler works" proof — exits non-zero on failure, so CI can gate on it. |
+| `scripts/bench.ps1` | Build-acceleration benchmark: compiles N heavy TUs serial / `/MP` / unity / unity-chunks+`/MP` and prints one before/after table. The reusable harness the Track 3 levers plug into. |
 | `samples/hello/` | Smallest program that proves compile + run (prints `_MSC_VER`). |
+| `samples/bench/` | `heavy.h` compile-cost fixture + the benchmark results writeup (`README.md`). |
 | `lessons-learned.md` | Gotchas, same numbered format as `perforce/` and `ci/`. |
 
 ## The compiler situation (resolved 2026-06-03)
@@ -70,11 +72,14 @@ same shape as `ci/lessons-learned.md` #2 (agent had no `p4` binary):
 
 ## Next (Track 3 roadmap — measured wins layer on the foundation)
 
-- [x] **`/MP` parallel compilation** — **3.94× (10.02 s → 2.54 s)**, 16 TUs
-      on 16 logical cores. The first free win (one flag). See
-      `samples/mp-demo/` + lessons-learned #2.
-- [ ] **Unity / jumbo build** vs per-TU compilation — removes the redundant
-      per-TU header parsing that `/MP` only *parallelizes* (next).
+- [x] **`/MP` parallel compilation** — one flag, **4.06×** (20.22 s → 4.98 s,
+      32 TUs / 16 cores). *Parallelizes* the redundant work.
+- [x] **Unity / jumbo build** — **27.7×** (→ 0.73 s) by parsing the shared
+      header *once* instead of N times. *Eliminates* the redundant work — and
+      on this header-parse-dominated fixture it beats `/MP` and even
+      chunked-unity+`/MP` (single core, 0.73 s, vs 8 chunks across 16 cores,
+      1.49 s). See `samples/bench/` + lessons-learned #3 (fixture bias +
+      unity's real costs: incremental granularity, ODR).
 - [ ] **PCH** review — is the precompiled header doing real work?
 - [ ] **FASTBuild** as orchestrator (the accelerator the public AAA world
       documents — Ubisoft et al.).

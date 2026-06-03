@@ -66,11 +66,10 @@ Prompt. Pin the toolchain version for reproducibility."*
 
 ## 2. `/MP` gives a real but sub-linear speedup — know why it's not N×
 
-**What happened:** Compiling 16 deliberately-heavy TUs went **10.02 s → 2.54 s**
-just by adding `/MP` — a **3.94×** speedup on a 16-logical-core box, with no
-code change. Stable across reps (serial 10.34/10.02/10.05; parallel
-2.54/2.54/2.58), so it's a real number, not a lucky run. Reproduce with
-`accel/scripts/demo-mp.ps1`.
+**What happened:** Compiling 32 deliberately-heavy TUs went **20.22 s → 4.98 s**
+just by adding `/MP` — a **4.06×** speedup on a 16-logical-core box, with no
+code change. Stable across cold reps, so it's a real number, not a lucky run.
+Reproduce with `accel/scripts/bench.ps1` (the `/MP (per-TU)` row).
 
 **Why not 16×** (this is the actual interview question):
 - **16 *logical* cores ≈ 8 physical + hyperthreading.** Compilation is
@@ -94,3 +93,56 @@ writes aren't parallel, and every TU still re-parses the same headers. That
 last point is why PCH and unity builds are the next lever: `/MP` parallelizes
 the redundant header work; PCH eliminates it. And keep `/MP` (within-project)
 distinct from MSBuild `/m` (across-project) so you don't oversubscribe cores."*
+
+## 3. Unity/jumbo build: *eliminating* redundant work can beat *parallelizing* it
+
+**What happened:** Same 32 heavy TUs, four ways (`accel/scripts/bench.ps1`,
+32 TUs / 16 logical cores):
+
+| config | best | vs serial |
+|---|---|---|
+| serial (per-TU) | 20.22 s | 1.00× |
+| `/MP` (per-TU) | 4.98 s | 4.06× |
+| **unity (1 file)** | **0.73 s** | **27.70×** |
+| unity ×8 + `/MP` | 1.49 s | 13.57× |
+
+The surprise: **unity on a single core (0.73 s) beat unity-chunked across 16
+cores (1.49 s), and crushed `/MP` (4.98 s).**
+
+**Why:** `/MP` parallelizes the work; unity *removes* it. Each per-TU compile
+re-parses `<regex>` (the dominant cost here) — 32 times. A unity build
+`#include`s all 32 TUs into one file, so `#pragma once` makes `heavy.h` parse
+**once**. When the bottleneck is redundant parsing, doing it once on one core
+beats doing it 8× across cores (chunked unity) or 32× across cores (`/MP`).
+The "obvious" sweet spot (chunk *and* parallelize) only wins when there's
+enough *per-TU* work to parallelize — which is the caveat.
+
+**The caveat that makes this honest:** the fixture is *header-parse-dominated
+by design* (trivial TU bodies). Real code has substantial per-TU codegen that
+`/MP` and chunked-unity genuinely parallelize, so on a real codebase the
+ranking shifts back toward chunked-unity+`/MP`. The transferable skill is not
+"unity wins" — it's **profile where the time goes, then pick the lever that
+attacks that cost.**
+
+**Unity's real costs** (not hit here — the fixture is collision-free by
+construction):
+- **Incremental granularity collapses**: touch one `.cpp` and the whole unity
+  blob recompiles. Studios tune unity *chunk size* to balance clean-build
+  speed vs incremental pain — which is exactly why the chunked config exists.
+- **ODR / symbol bleed**: `static` helpers, anonymous namespaces, `using`
+  directives, and `#define`s leak across concatenated TUs. Unity builds
+  surface latent ODR violations that per-TU compilation hid.
+
+**Why a build engineer cares:** "cut the 25-min build to 12" is a *profiling*
+question, not flag cargo-culting. Unity/jumbo is the biggest single lever when
+a few heavy headers are included everywhere (the common AAA case), but it
+trades away incremental speed and can expose ODR bugs — so you tune chunk size
+rather than going all-in on one blob.
+
+**Interview-ready bullet:** *"On a header-parse-dominated build a unity build
+gave ~28× by parsing the shared header once instead of per-TU — beating `/MP`'s
+4× outright, because eliminating redundant work beats parallelizing it. But
+that's fixture-specific: real per-TU codegen parallelizes, so you tune unity
+*chunk size* (clean-build speed vs incremental granularity) and watch for the
+ODR violations unity surfaces. The real skill is profiling where build time
+goes before reaching for a lever."*
