@@ -1,19 +1,26 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 2518262 - AAA build/databuild engineering skill ladder
+Branch: main   |   Last commit: 39e603b - accel(track3): /MP parallel-compilation benchmark
 
-**This repo is now PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . On 2026-06-03 history was flattened to a single clean commit for public release (scrubbed the real machine name -> `WS01`, genericized job-target/employer references). The full 13-commit dev history is preserved in the local `localbak` backup mirror. **Because it's public now: never commit secrets, the real machine name, or job-hunt / employer specifics.**
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. History was flattened for the public release on 2026-06-03; full dev history is in the local `localbak` mirror. Commits here carry **no co-author trailer** (matches the public release).
 
-## What was just built
-- **2026-06-03 - went public.** Security pass (gitleaks clean across history), scrubbed the `DESKTOP-...` machine name, genericized target-employer references in README / ROLE_NOTES / SEEDS / SKILLS_ROADMAP, flattened history, pushed to public GitHub, no co-author trailer. Tracks 1-2 ship as the portfolio.
-- **Track 2 complete** (pre-flatten; per-commit detail lives in the localbak mirror) - TeamCity four-stage DAG **Compile -> (Smoke || Cook) -> Package** via an idempotent REST bootstrap (`ci/scripts/bootstrap-builds.ps1`), a custom p4-baked agent image, and a seeded Hoops Brawl CMake project in `//game/main`. Verified end-to-end (all four SUCCESS in ~35s -> `hoops-brawl.tar.gz`). Lessons in `ci/lessons-learned.md` + `perforce/lessons-learned.md` (#3 broker-is-a-router-not-a-journal; #4 TeamCity REST per-endpoint content negotiation).
-- **Track 1 complete** - Perforce sandbox: stream depot, broker, submit triggers, P4Python janitor tooling.
+## What was just built (2026-06-03 - unattended session)
+Three verified, committed deliverables:
+
+- **Track 1 broker hardening - DONE** (`049bfcc`). Added a service-account allowlist to the code-freeze rule (`perforce/broker/p4broker.conf`): a `user = ^(buildagent|build-svc|infra-svc)$` PASS rule placed *before* the blanket reject (first-match-wins). Closes the audit-trail gap from `ci/lessons-learned.md` #3 - automation now submits *through* the broker (allowed AND logged in `broker.log`) instead of bypassing to `:1666` and vanishing from the audit log. Verified: `james`->REJECT, `buildagent`/`build-svc`->PASS->p4d, all three logged. Docs: broker/README "Service-account allowlist" section + `perforce/lessons-learned.md` #11.
+- **Track 3 started - toolchain foundation** (`191bb3f`). The "C++ compiler situation" was *activation, not acquisition*: VS2019 Build Tools (cl 19.29) and VS2017 Community (cl 19.16) are both installed but gated behind vcvars. `accel/scripts/activate-msvc.ps1` (vswhere -latest -> vcvars replay into the PS session) + `smoke-build.ps1` (compile+run+assert). Verified: activates BuildTools 2019, compiles, runs, `_MSC_VER=1929`, SMOKE OK. `accel/lessons-learned.md` #1.
+- **Track 3 first measured win - /MP** (`39e603b`). `accel/scripts/demo-mp.ps1` benchmarks serial vs `/MP` compilation of 16 heavy TUs: **10.02s -> 2.54s = 3.94x** on 16 logical cores, stable across reps. `accel/samples/mp-demo/` + `accel/lessons-learned.md` #2 (why ~4x not 16x).
+
+**Infra is currently RUNNING** (I started it this session): p4d on :1666, broker on :1667. Stop with `perforce\broker\stop-broker.ps1` then `perforce\scripts\stop-p4d.ps1` if you want them down.
 
 ## Live edge
-Tracks 1-2 are done and now public. Next-step work is a menu, not a forced path. Top candidates: (a) add a second build agent so the DAG's Smoke || Cook fork actually parallelizes (it serialized in the verify run - only one agent); (b) Track 1 broker hardening (service-account allowlist) to close the lesson-#3 audit-trail gap; (c) kick off Track 3 (build acceleration / FASTBuild). Mind what you commit - the repo is public.
+Track 1's broker is hardened (allowlist + audit gap closed). Track 3 is live with a working, activatable MSVC toolchain and one measured acceleration result. The next-step menu is wide open:
+- **Track 3 next levers** (the `accel/README.md` roadmap): **unity/jumbo build** and **PCH** - both remove the redundant per-TU header parsing that `/MP` only *parallelizes* (the demo-mp harness generalizes to measure these); then **FASTBuild** as orchestrator (needs a portable binary download - ~30 min task on its own); then linker-time profiling + a one-page report.
+- **Track 1 still-deferred** (broker/README "Real-world hardening"): `policies.d/` modular policy assembly; `redirection = pedantic` for replica-bound commands; filter-mode (`action = filter`) handler driving a Python policy script.
+- **Track 2** (needs Docker Desktop, which was down this session): second build agent to actually parallelize the Smoke||Cook DAG fork; VCS-change trigger on Compile.
 
 ## Next
-1. **Restart infra** (order matters): `perforce\scripts\start-p4d.ps1` -> `perforce\broker\start-broker.ps1` -> verify `p4 -p localhost:1667 info`. Then Docker Desktop + `docker compose up -d` from `ci/`. Re-run `ci\scripts\bootstrap-builds.ps1` if the four build configs didn't survive a restart (idempotent, auto-grabs the superuser token; `-Recreate` to wipe + redo).
-2. **Pick a follow-up:** second agent (~30 min; confirms DAG parallelism - strong interview demo) · broker service-account allowlist (Track 1 hardening, closes lesson #3) · VCS-change trigger on Compile (`POST /buildTypes/{id}/triggers`) · or start Track 3.
-3. **(Optional)** Kotlin DSL versioned settings (`.teamcity/settings.kts`) - higher interview-narrative value, higher complexity; defer until you want the polish.
+1. **If infra was stopped, restart** (order matters): `perforce\scripts\start-p4d.ps1` -> `perforce\broker\start-broker.ps1` -> verify `p4 -p localhost:1667 info`. (Both were left running at session end.)
+2. **Activate the compiler in any new shell:** `. .\accel\scripts\activate-msvc.ps1` (dot-source), then `pwsh -File .\accel\scripts\smoke-build.ps1` to confirm.
+3. **Pick a follow-up:** unity-build vs per-TU measurement (extends demo-mp, closes the "why not 16x" loop with data) · PCH win · FASTBuild bring-up · broker `policies.d/` · or Track 2's second agent once Docker is up.
