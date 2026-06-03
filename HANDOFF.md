@@ -1,17 +1,17 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 4c388d4 - accel(track3): linker-time profiling lever -- the last roadmap lever
+Branch: main   |   Last commit: b3c708f - ci(track2): resolve bench second-agent by name, not hardcoded id
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. Full pre-public dev history is in the local `localbak` mirror. Commits here carry **no co-author trailer** (matches the public release). Vendor binaries (FBuild.exe, p4 binaries) are gitignored, never committed.
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. Commits here carry **no co-author trailer** (matches the public release). `data/` (TeamCity DB/agent conf) and vendor binaries are gitignored. NB: `git push` is permission-blocked for the agent this session - the human runs `! git push origin main`. Both commits below are already pushed and public.
 
 ## What was just built
-- `4c388d4` Track 3 - **linker-time profiling lever** (the last roadmap lever). New `accel/scripts/bench-link.ps1` + generated 16k-symbol fixture (`samples/link/`), compiled once, link varied: incremental relink `0.033s` vs full `0.081s` (**2.45x**); `/OPT:REF,ICF` 777->247 KB; `/LTCG` (`/GL` objs) **21.79s = 269x slower** (codegen moves to link). Link is a separate phase no compile lever touches. Track 3 roadmap now **COMPLETE**. lessons #6, REPORT.md section C + H5 + framework step 5, `samples/link/README.md`.
+- `b3c708f` Track 2 - bench hardening: `bench-agents.ps1` resolves the second agent by **name** (`agent-linux-02`) via a new `Get-AgentId` lookup instead of a hardcoded `id=11`, so the "just run it" script survives a fresh DB (`docker compose down -v`). Syntax-checked; not re-run live (stack was already down).
+- `678a1b6` Track 2 - **second build agent + parallelism benchmark**. New `teamcity-agent-02` (distinct compose service, own conf/identity volume - NOT `--scale`, which collides on the persisted agent identity). New `ci/scripts/bench-agents.ps1` (`-Repeat N`, median/min/max). Result, median of 5 A/B trials: leaf stage (Smoke Test ‖ Cook Data) **22s -> 11s = 2x**, whole chain 45s -> 34s (~24%), overlap consistent across all 5, near-zero variance. Broker log confirmed agent-02 syncs through `:1667`. lessons #5 (agent-pool sizing tracks DAG width) + #6 (superuser token rotates per process; stale-token tight-loop trips the brute-force lockout). README updated.
 
 ## Live edge
-Track 3 is **fully complete** - all five levers measured (`/MP`, unity, PCH, FASTBuild, **link**), capstone in `accel/REPORT.md`, roadmap fully ticked. **PUSH PENDING:** commits `4c388d4` (+ this closeout commit) are local only - the push to origin was permission-blocked this session. Sandbox infra remains STOPPED.
+Track 2 second-agent increment is **complete and public**. One loose verification thread: the by-name fix (`b3c708f`) was syntax-checked but never exercised live - the stack was shut down before the edit. Sandbox infra (TeamCity x3 containers + p4d + broker) is **STOPPED**, data preserved.
 
 ## Next
-1. **Push to origin** - run `! git push origin main` to publish `4c388d4` + the closeout commit. The only loose end from this session.
-2. **Track 3 is banked.** Switch tracks: Track 1 `policies.d/` modular broker policy; Track 2 second build agent / VCS-change trigger (needs Docker Desktop up); Track 4 (Unreal BuildGraph/Horde) or Track 5 (data cooker + WPF tool), both greenfield.
-3. **To re-run accel hands-on:** `. .\accel\scripts\activate-msvc.ps1`, then `pwsh -File .\accel\scripts\bench.ps1` / `demo-fbuild.ps1` / `bench-link.ps1`. Restart p4d/broker only if a track needs it (`perforce\scripts\start-p4d.ps1` -> `perforce\broker\start-broker.ps1`).
+1. **Pick the next Track 2 lever.** Strongest is the **VCS-change trigger**: add a `<build-triggers>` vcsTrigger to Compile so a P4 submit through the broker (`:1667`) auto-fires the whole chain - closes the end-to-end studio loop and ties Track 1 ↔ Track 2. (Alt: native **Windows agent** for MSBuild - the OS-diversity / separate-host case. Or switch tracks: 1 `policies.d/`, 4 Unreal BuildGraph/Horde, 5 data cooker + WPF tool.)
+2. **Bring the stack up first** (any Track 2 work needs it): `perforce\scripts\start-p4d.ps1` -> `perforce\broker\start-broker.ps1`, then `cd ci; docker compose up -d`. Heads-up: on restart TeamCity re-inits for a few min and **rotates the superuser token** - scrape the *last* occurrence from the log *after* init (see lesson #6), and don't tight-loop auth. While up, opportunistically run `pwsh -File .\ci\scripts\bench-agents.ps1 -Repeat 1` to close the by-name verification thread.
