@@ -43,7 +43,7 @@ param(
     [string]$Token,
     [string]$BaseUrl     = "http://localhost:8111",
     [string]$TopBuildType = "AAASandbox_Package",
-    [int]$Agent2Id        = 11,
+    [string]$Agent2Name   = "agent-linux-02",
     [int]$Repeat          = 1,
     [int]$TimeoutSec      = 300,
     [switch]$ShowBuilds
@@ -89,6 +89,18 @@ function Set-AgentAuthorized {
     param([int]$Id)
     Invoke-TC PUT "/app/rest/agents/id:$Id/authorized" -Body "true" `
         -ContentType "text/plain" -Accept "text/plain" | Out-Null
+}
+
+function Get-AgentId {
+    # Resolve agent id by name. The internal id is NOT stable — it reflects
+    # the server's registration history, so a fresh HSQLDB (docker compose
+    # down -v) hands the same agent a different id. Always look it up.
+    param([string]$Name)
+    $r = Invoke-TC GET "/app/rest/agents?locator=name:$Name,authorized:any,connected:any"
+    if (-not $r.agent -or $r.count -lt 1) {
+        throw "No agent named '$Name' is connected. Is the stack up (docker compose ps)?"
+    }
+    [int](@($r.agent)[0].id)
 }
 
 # TeamCity stamps are yyyyMMddTHHmmsszzz (e.g. 20260603T170347+0000).
@@ -179,6 +191,8 @@ function Get-RunSummary {
 # ---------- run ----------
 
 Write-Host "Agent-pool benchmark at $BaseUrl  (repeat=$Repeat)" -ForegroundColor Cyan
+$Agent2Id = Get-AgentId -Name $Agent2Name   # by name — id is not stable across a fresh DB
+Write-Host "second agent '$Agent2Name' = id $Agent2Id" -ForegroundColor DarkGray
 Set-AgentAuthorized -Id $Agent2Id   # no-op if already authorized
 
 $trials = @()
