@@ -103,6 +103,13 @@ Ryzen 7 7800X3D (8c/16t) · 31 GB RAM · **RTX 3060 12 GB** · F: 2.8 TB free.
    duration/status trends, FASTBuild/bgfx cache-hit & accel numbers; honest about overhead-bound
    parallelism. Closes Track 2's roadmap dashboard **and** is the #1 cross-portfolio differentiator.
    [~2–3 days]
+   → **2026-06-04: DONE.** ✅ Two-stage pipeline: `collect-metrics.ps1` gathers three live feeds
+   (TeamCity REST · `bench -Json` emits · `p4` streams/depots) → committed `snapshot.json` →
+   `build-dashboard.ps1` renders a self-contained `dashboard.html` (inline SVG, **no JS framework/CDN**,
+   byte-deterministic). Real captured demo state: **23 CI builds** across all 4 configs (CLs 46–51) with
+   **one genuine red** Smoke Test (a `ctest` break injected + fixed), real accel numbers
+   (compile/bgfx/link/FASTBuild), live perforce streams/depots. TDD throughout (`dashboard/tests/`);
+   the real capture even caught a collector timestamp bug the fixture had masked. **Closes Phase 1.**
 
 ### Phase 2 — TBD: re-sanity the order after the dashboard ships
 
