@@ -3,13 +3,15 @@
   Bootstrap the AAA Sandbox build chain in TeamCity (idempotent).
 
 .DESCRIPTION
-  Drives the TeamCity REST API to create four chained build
-  configurations under the existing AAASandbox project, attached to
-  the existing Game Main Stream VCS root.
+  Drives the TeamCity REST API to create the AAASandbox project, the
+  Game Main Stream Perforce VCS root, and four chained build
+  configurations attached to that root — from scratch, so a wiped
+  server (docker compose down -v) rebuilds with no manual UI step.
 
-  Re-runnable: each build config is skipped if it already exists.
-  Use -Recreate to wipe and redo (drops run history for those
-  configs).
+  Re-runnable: the project, VCS root, and each build config are
+  skipped if they already exist. Use -Recreate to wipe and redo the
+  VCS root + build configs (drops run history); the project is left
+  intact (a from-scratch project is exercised by down -v, not -Recreate).
 
   Chain shape (a DAG, not a strict line — Smoke Test and Cook Data
   parallelize once Compile is done):
@@ -308,17 +310,34 @@ Write-Host "TeamCity bootstrap at $BaseUrl" -ForegroundColor Cyan
 Write-Host "Project: $ProjectId | VCS root: $VcsRootId" -ForegroundColor Cyan
 Write-Host ""
 
+# -Recreate teardown, in reverse-dependency order so nothing is deleted while it
+# is still referenced: build types first (they hold the vcs-root-entry attachment),
+# then the VCS root (now unreferenced — DELETE is safe without relying on TeamCity's
+# cascade-on-delete behavior). The project is a container we never tear down here;
+# a from-scratch project is exercised by `docker compose down -v`, not by -Recreate.
+if ($Recreate) {
+    foreach ($cfg in $configs) {
+        if (Test-BuildType -Id $cfg.Id) {
+            Write-Host "[delete] $($cfg.Id)" -ForegroundColor Yellow
+            Remove-BuildType -Id $cfg.Id
+        }
+    }
+    if (Test-VcsRoot -Id $VcsRootId) {
+        Write-Host "[delete] vcs-root $VcsRootId" -ForegroundColor Yellow
+        Remove-VcsRoot -Id $VcsRootId
+    }
+}
+
+# Create the chain's dependencies in order, before the loop attaches the root.
+Ensure-Project
+Ensure-VcsRootDefinition
+
 foreach ($cfg in $configs) {
     $id = $cfg.Id
 
     if (Test-BuildType -Id $id) {
-        if ($Recreate) {
-            Write-Host "[delete] $id" -ForegroundColor Yellow
-            Remove-BuildType -Id $id
-        } else {
-            Write-Host "[skip]   $id (already exists)" -ForegroundColor DarkGray
-            continue
-        }
+        Write-Host "[skip]   $id (already exists)" -ForegroundColor DarkGray
+        continue
     }
 
     Write-Host "[create] $id  ($($cfg.Name))" -ForegroundColor Green
