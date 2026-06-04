@@ -27,6 +27,11 @@ param(
   [string]$Configuration = 'Development',
   [string]$EnginePath,   # default: newest UE_5.* from the launcher manifest
   [string]$Uproject,     # default: scanned Lyra*.uproject
+  [int]$MaxParallelActions = 8,  # cap concurrent compile actions to fit the commit ceiling.
+                                 # 0 = uncapped (all cores). (Track 4 lesson #1: C3859/C1076.)
+  [switch]$NoUBA,        # disable Unreal Build Accelerator (-NoUBA). UBA reserves large virtual
+                         # memory; on this no-pagefile box (commit limit = 31GB) that tips
+                         # cl.exe PCH allocs over the commit limit. UBA is Phase 2 step 2.
   [switch]$Clean,        # add -Clean (force full rebuild)
   [switch]$DryRun        # resolve + print the command, do not build
 )
@@ -44,6 +49,8 @@ $Uproject = Find-LyraUproject -Uproject $Uproject
 if (-not $Uproject -or -not (Test-Path $Uproject)) { throw 'Lyra .uproject not found (pass -Uproject).' }
 
 $buildArgs = @($Target, $Platform, $Configuration, "-Project=$Uproject", '-WaitMutex')
+if ($MaxParallelActions -gt 0) { $buildArgs += "-MaxParallelActions=$MaxParallelActions" }
+if ($NoUBA) { $buildArgs += '-NoUBA' }
 if ($Clean) { $buildArgs += '-Clean' }
 
 Write-Host "Engine : $EnginePath"
