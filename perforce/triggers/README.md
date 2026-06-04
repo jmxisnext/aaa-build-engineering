@@ -50,6 +50,8 @@ Installed end-to-end by `ci/scripts/setup-vcs-trigger.ps1` (mint token → deplo
 
 It is **fail-safe**: `change-commit` fires *after* the commit is durable and the script always exits 0, so a hook failure can never block a submit — worst case "instant" degrades to "next scheduled poll."
 
+(`hook.log` at `C:\PerforceSandbox\triggers\hook.log` grows unbounded — fine for the sandbox; rotate it if this is ever productionized.)
+
 ### Loop-safety invariant (do not break this)
 
 The build chain emits **TeamCity artifacts** (`build.zip`, `Cooked.pak`, the tarball) — it never `p4 submit`s back into `//game/main`. That is what keeps this hook from looping: commit → build → (no commit). **If you ever add a step that submits build output into a path under `//game/main/...`, this trigger will re-fire on it and you'll get an infinite build loop.** Submit such output to a separate depot/path the trigger does not watch, or guard it by user.

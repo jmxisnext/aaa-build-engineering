@@ -136,6 +136,10 @@ repo), adds the VCS trigger to Package, and installs the p4d `change-commit`
 trigger. See `lessons-learned.md` #7 for the durable-token, endpoint-topology, and
 self-service-token gotchas.
 
+> After a full `docker compose down -v`, recreate the `AAASandbox_GameMainStream`
+> VCS root (see *Wiring to Track 1*) and run `bootstrap-builds.ps1` **before** this —
+> the trigger references that root and the Package config, so both must exist first.
+
 **Demo / self-test (proves both policy halves; exits non-zero on failure):**
 
 ```powershell
