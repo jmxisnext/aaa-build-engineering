@@ -1,16 +1,25 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 552f52a - docs(track4): dashboard implementation plan (10 tasks, TDD)
+Branch: main   |   Last commit: 3bb807b - docs(track4): mark Phase 1 step 4 (dashboard) done; close out Phase 1
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/` + `localbak/`, vendor binaries, and `accel/extern/` are gitignored. `git push` to GitHub origin is permission-blocked for the agent - the human runs `! git push origin main`. Everything through `3cc1166` is on GitHub (pushed before the prior session). **Unpushed: `a2504ff` (Track 3) + `4e25638` (closeout) + `f3c4e6f` (dashboard spec) + `552f52a` (dashboard plan) = 4 commits. Human: `! git push origin main` when ready.**
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/` + `localbak/`, vendor binaries, `accel/extern/`, and `accel/.metrics/` are gitignored. `git push` to GitHub origin is permission-blocked for the agent - the human runs `! git push origin main`. **`origin/main` is at `3cc1166`; HEAD is 15 commits ahead (16 after this closeout): the prior 5 (`a2504ff`, `4e25638`, `f3c4e6f`, `552f52a`, `90aa0e3`) + this session's 10 (`f9a7d00`..`3bb807b`) + the closeout. Human: `! git push origin main` when ready.**
 
 ## What was just built
-- `552f52a` **Dashboard implementation plan** - `docs/superpowers/plans/2026-06-04-dashboard.md`, 10 TDD tasks: scaffold+fixture -> inline-SVG chart helpers -> full HTML render (deterministic, self-contained) -> CLI smoke -> bench `-Json` emits (4 scripts) -> collector feed transforms (CI/accel/perforce) + stale-fallback -> seed-build-history wrapper -> README -> **real capture + commit demo state** -> roadmap wire-up. Complete code per step; two flagged executor follow-ups (verify `bench-link.ps1` result labels vs its `-Json`; confirm `demo-vcs-trigger.ps1` params).
-- `f3c4e6f` **Dashboard design spec** - `docs/superpowers/specs/2026-06-04-dashboard-design.md`. Approved design: collector -> committed `snapshot.json` -> self-contained static `dashboard.html` (inline SVG, NO JS framework/CDN); all 3 tracks with CI as centerpiece (build history: config/#/CL/status/duration/url); real captured CI history (infra up once); perforce feed refined to live `p4` query w/ stale-fallback (mirrors CI).
+Executed the full 10-task dashboard plan (`docs/superpowers/plans/2026-06-04-dashboard.md`) via TDD - **Phase 1 step 4 (the observability dashboard) is DONE**:
+- 3bb807b docs(track4): mark Phase 1 step 4 done; **close out Phase 1** (ROADMAP_NEXT + repo README)
+- 5496d49 **capture real snapshot + built dashboard (demo state)** - 23 real CI builds across all 4 configs (CLs 46-51), one genuine red Smoke Test (a `ctest` break injected on CL50 + fixed on CL51), real accel numbers, live perforce
+- 8ddca0d fix: normalize TeamCity finishUtc to ISO-8601 in collector - **real capture caught a timestamp bug the fixture had masked** (+ regression test)
+- d9aa7e5 docs: dashboard README
+- dc41a81 seed-build-history operational wrapper (loops the trigger for a real multi-CL history)
+- ffededa collector feed transforms (CI/accel/perforce) + stale fallback
+- ab8998a `-Json` metrics emit on the 4 bench scripts (accel feed)
+- fd97c3d full dashboard HTML render (3 panels, deterministic, self-contained, no JS/CDN)
+- 98c722c inline-SVG chart helpers (timeline, bars, duration)
+- f9a7d00 scaffold - assert harness + test fixture
 
 ## Live edge
-Phase 1 step 4 (the dashboard) is **fully designed + planned but NOT executed** - no `dashboard/` code exists yet. The plan is ready to run task-by-task. Tasks 1-8 are pure-local (scripts + tests, no infra); **Task 9 is the infra-heavy milestone** (needs Docker/TeamCity up + MSVC active to capture the real snapshot) - the natural checkpoint. All sandbox infra is STOPPED, data preserved.
+**Phase 1 is CLOSED.** The dashboard ships: `collect-metrics.ps1` -> committed `dashboard/data/snapshot.json` -> `build-dashboard.ps1` -> self-contained `dashboard/dashboard.html` (opens offline, byte-deterministic). All tests green; all sandbox infra STOPPED (TeamCity containers + p4d/broker), data preserved on disk. The open question is now **Phase 2 sequencing (Tracks 4-5)**, deliberately deferred until the dashboard shipped. Two carried follow-ups from the dashboard build: (a) `bench-agents.ps1` likely still has the CSRF-on-writes bug (SEEDS, lesson #10); (b) the collector captures perforce streams/depots live but leaves `triggers=@()`/`proxy=$null` - the panel is thinner than the fixture (could query `p4 triggers -o` if a richer perforce panel is wanted).
 
 ## Next
-**Execute `docs/superpowers/plans/2026-06-04-dashboard.md`** via `superpowers:subagent-driven-development` (recommended - fresh subagent per task, review between) or `superpowers:executing-plans` (inline w/ checkpoints). Start at **Task 1** (scaffold `dashboard/` + assert harness + `snapshot.fixture.json`) and work straight through Tasks 1-8 local; pause before **Task 9** to bring infra up (`docker compose -f ci/docker-compose.yml up -d` + `. .\accel\scripts\activate-msvc.ps1`) for the real-snapshot capture. Closes Phase 1; after it ships, re-sanity the Phase 2 order (tracks 4-5).
+Re-sanity the **Phase 2 order** in `ROADMAP_NEXT.md` (the "Phase 2 - TBD" section): Track 4 (Unreal BuildGraph compile->cook->package on **Lyra**, wired into TeamCity) vs Horde-on-one-box + UBA vs Track 5 (Python cook pipeline + WPF tool). Pick the first Phase 2 move and define its demoable artifact before building; Lyra is workload-tier injection #2. To restart infra when needed: `docker compose -f ci/docker-compose.yml up -d` + `perforce/scripts/start-p4d.ps1` + `perforce/broker/start-broker.ps1` + `. .\accel\scripts\activate-msvc.ps1`.
