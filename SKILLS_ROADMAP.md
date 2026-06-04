@@ -1,5 +1,7 @@
 # Skills Roadmap — Build Engineer practice
 
+> **Next-phase sequencing, the 2026 landscape update, the workload tier, and hardware reality live in [`ROADMAP_NEXT.md`](ROADMAP_NEXT.md).** This file remains the original 5-track definition.
+
 Five tracks. Each track produces one concrete artifact you can demo or reference in an interview. Tracks are sequenced so later ones can reuse earlier infrastructure (e.g., track 2 builds the project that track 1 puts in Perforce).
 
 ## Track 1 — Perforce sandbox
