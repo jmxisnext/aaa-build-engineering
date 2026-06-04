@@ -89,6 +89,7 @@ if ($runUat -and (Test-Path $runUat)) {
 # --- 3. Lyra project ---
 $lyra = $LyraUproject
 if (-not $lyra) {
+  # (a) launcher manifest (rarely lists created sample projects, but cheap to try)
   $cand = $launcherItems |
           Where-Object { $_.AppName -like '*Lyra*' -or $_.InstallLocation -like '*Lyra*' } |
           Select-Object -First 1
@@ -98,11 +99,25 @@ if (-not $lyra) {
     if ($u) { $lyra = $u.FullName }
   }
 }
+if (-not $lyra) {
+  # (b) scan the usual project roots - 'Create Project' sample projects are NOT
+  #     in the launcher manifest. Specific roots first (fast), bare drives last.
+  $roots = @(
+    'G:\UnrealProjects', 'G:\Unreal Projects',
+    (Join-Path $env:USERPROFILE 'Documents\Unreal Projects'),
+    'D:\UnrealProjects', 'G:\', 'D:\'
+  ) | Where-Object { Test-Path $_ }
+  foreach ($root in $roots) {
+    $u = Get-ChildItem -Path $root -Filter 'LyraStarterGame.uproject' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+         Select-Object -First 1
+    if ($u) { $lyra = $u.FullName; break }
+  }
+}
 if ($lyra -and (Test-Path $lyra)) {
   Add-Check 'Lyra project' $true $lyra
 } else {
   Add-Check 'Lyra project' $false `
-    'LyraStarterGame.uproject not found (Launcher Samples -> Lyra -> Create Project; or pass -LyraUproject)'
+    'LyraStarterGame.uproject not found (Launcher: Library/Vault -> Lyra -> Create Project to G:\UnrealProjects; or pass -LyraUproject)'
 }
 
 # --- report ---

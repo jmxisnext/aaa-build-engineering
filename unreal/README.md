@@ -49,8 +49,8 @@ pwsh -File unreal/scripts/check-prereqs.ps1
 
 ## Status
 
-- **2026-06-04:** Track scaffolded; prereq gate-check written (`scripts/check-prereqs.ps1`).
-  **VS2022 17.14 installed** (NativeGame + .NET-desktop workloads) — gate-check confirms the
-  C++ x64 toolset **PASS** (1/3 green). Remaining RED: UE 5.x + Lyra (login-gated Epic
-  downloads to `G:\`). Next: once both land, gate goes green → UBT compiles `LyraEditor`
-  (Development/Win64) = slice #1.
+- **2026-06-04:** Track scaffolded; prereq gate-check written + hardened to auto-find the Lyra
+  sample project on G: (`scripts/check-prereqs.ps1`). Prereqs: **VS2022 17.14 ✅** ·
+  **UE 5.6.1 ✅** (`G:\UnrealEngine\UE_5.6`, installed via the Launcher) · **Lyra ⏳**
+  (Create Project to `G:\UnrealProjects`) — **2/3 green**. Next: gate goes green → UBT compiles
+  `LyraEditor` (Development/Win64) = slice #1.
