@@ -138,14 +138,21 @@ repo), adds the VCS trigger to Package, and installs the p4d `change-commit`
 trigger. See `lessons-learned.md` #7 for the durable-token, endpoint-topology, and
 self-service-token gotchas.
 
-> After a full `docker compose down -v`, just run `bootstrap-builds.ps1` **before**
-> this — it now creates the `AAASandbox` project and the `AAASandbox_GameMainStream`
-> VCS root (stream mode) from scratch, then the chain. The trigger references that
-> root and the Package config, so bootstrap must run first.
+> **Resetting (read this — `down -v` does NOT wipe this stack).** All state is a host
+> bind mount under `ci/data/`; `-v` removes only named/anonymous volumes (here just a
+> temp dir), so `down -v && up -d` brings the server back with everything intact. Two
+> real reset paths:
 >
-> The only steps NOT scripted are one-time per fresh server: walking TeamCity's
-> first-run setup wizard, and authorizing the agents (Agents → Unauthorized →
-> Authorize). "Hands-off reset" means hands-off *after* that initial setup.
+> - **Config reset (verified, no wizard):** delete the `AAASandbox` project — UI, or
+>   `DELETE /app/rest/projects/id:AAASandbox` — which cascades the VCS root and the
+>   chain, then run `bootstrap-builds.ps1`. It recreates the project, the
+>   `AAASandbox_GameMainStream` VCS root (stream mode), and the chain from scratch;
+>   follow with `setup-vcs-trigger.ps1`. (The trigger references that root + the Package
+>   config, so bootstrap must run first.)
+> - **Full wipe:** stop the stack and delete `ci/data/teamcity_server/datadir` (+ the
+>   agent `conf` dirs), then `up -d`. Empties the server entirely — which also resurrects
+>   TeamCity's one-time first-run setup wizard and agent authorization, the only steps
+>   not scripted. See `lessons-learned.md` #9.
 
 **Demo / self-test (proves both policy halves; exits non-zero on failure):**
 

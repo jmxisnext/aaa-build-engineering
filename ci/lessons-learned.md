@@ -496,4 +496,43 @@ That caught two things memory would've missed: the root was stream-mode, not the
 mapping our docs claimed, and its workspace options were space-aligned, not tabbed. The
 lesson: idempotent ≠ reproducible; only a from-scratch run proves the latter."*
 
+## 9. `docker compose down -v` doesn't wipe a bind-mounted stack — the "reset" wasn't resetting
+
+**What happened:** The compose header promised the stack was "`docker compose down -v`
+reset-able," and two specs' reset stories rode on that. Verifying it *before* a
+destructive test (rather than after a disaster) showed otherwise: all server state — the
+2.1 GB TeamCity DB and agent identity — is a host **bind mount** under `ci/data/`, and
+`down -v` removes only *named and anonymous* volumes (here, one throwaway
+`/opt/teamcity/temp`). The bind-mounted `datadir` is untouched, so `down -v && up -d`
+brings the server back with every project, VCS root, and build config intact — and
+`bootstrap-builds.ps1` would `[skip]` everything, "proving" a reset that never happened.
+
+**Root cause:** `-v` is about Docker-managed volumes, not host paths. A bind mount is a
+window onto a host directory, and Compose never deletes host directories. The mental
+model "`down -v` = clean slate" holds only when your state lives in *named volumes*.
+
+**Fix:** make the two real resets explicit, and stop conflating them.
+- **Config reset:** delete the project via REST/UI (cascades root + chain) and re-run
+  `bootstrap-builds.ps1` — exercises the from-absence create path without touching the
+  server install. This is the one verified here (project deleted, bootstrap recreated
+  project + root + chain, demo green).
+- **Full wipe:** stop and delete `ci/data/teamcity_server/datadir` (+ agent `conf`), then
+  `up -d` — truly empty, but it resurrects the one-time first-run wizard.
+- Corrected the compose header and the README/spec reset stories accordingly.
+
+**Why a build engineer cares:** "it's reset-able" is a claim you execute against the real
+wiped state, never infer from a flag's name. A reset that silently no-ops is worse than
+no reset script — it manufactures false confidence that disaster recovery works. And
+bind-mount vs named-volume is precisely the infra detail that decides whether `down -v`
+is a clean slate or a no-op; know which your stack uses before you stake a recovery on it.
+
+**Interview-ready bullet:** *"Our compose stack claimed to be `down -v` reset-able, but
+all its state was a host bind mount — and `-v` only removes Docker-managed volumes, so the
+database survived and the 'reset' was a no-op that just re-skipped everything. I made the
+two real reset paths explicit — a config-level project delete that re-runs the bootstrap,
+and a full datadir wipe that resurrects the first-run wizard — and verified the config one
+against an actually-empty project. The lesson: never trust a reset you haven't run against
+the wiped state, and know whether your state is a volume or a bind mount before you bet
+recovery on `-v`."*
+
 

@@ -157,22 +157,23 @@ to an existing installer, reusing its `Invoke-TC` helper and superuser-scrape au
 
 ## 7. Reset story — now hands-off after initial setup
 
-One-time, per fresh server (NOT scripted — out of scope, §8): walk the TeamCity first-run
-setup wizard, then authorize the agents (Agents → Unauthorized → Authorize).
+**Correction found during implementation:** `docker compose down -v` does NOT wipe this
+stack. All state is a host **bind mount** under `ci/data/` and `-v` removes only
+named/anonymous volumes (here, a lone temp dir) — so `down -v && up -d` returns the
+server with project/root/chain intact, and bootstrap would `[skip]` everything. The
+earlier spec's "down -v reset" premise (inherited here in draft) was false. Two real
+reset paths:
 
-Per-reset (fully scripted):
+- **Config reset (the one verified — no wizard):** delete the `AAASandbox` project
+  (`DELETE /app/rest/projects/id:AAASandbox`, cascades root + chain) → `bootstrap-builds.ps1`
+  recreates project + root + chain from absence → `setup-vcs-trigger.ps1` → `demo-vcs-trigger.ps1`.
+- **Full wipe:** stop, delete `ci/data/teamcity_server/datadir` (+ agent `conf`), `up -d`
+  — truly empty, but resurrects the one-time first-run wizard + agent authorization.
 
-```powershell
-docker compose -f ci\docker-compose.yml down -v
-docker compose -f ci\docker-compose.yml up -d        # wait for healthy + agents
-pwsh -File .\ci\scripts\bootstrap-builds.ps1          # NOW creates project + root, then the chain
-pwsh -File .\ci\scripts\setup-vcs-trigger.ps1         # mint token + triggers
-pwsh -File .\ci\scripts\demo-vcs-trigger.ps1          # both policy cases PASS
-```
-
-p4d + broker are native Windows processes → untouched by `down -v`. The two things
-previously manual *per reset* — creating the project and the VCS root in the UI — are now
-`bootstrap-builds.ps1`.
+p4d + broker are native Windows processes → untouched either way. The two things
+previously manual *per config reset* — creating the project and the VCS root — are now
+`bootstrap-builds.ps1`. The first-run wizard + agent authorization remain the only
+unscripted steps (§8), and only the full wipe re-triggers them. See lessons #9.
 
 ## 8. Out of scope (this lever)
 

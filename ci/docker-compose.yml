@@ -3,8 +3,11 @@
 # The server is exposed to the Windows host on :8111. The agent talks
 # to the server over the internal compose network at teamcity-server:8111
 # and talks to the Track 1 P4 broker on the Windows host via
-# host.docker.internal:1667. All runtime state lives under ./data/ so
-# the whole stack is `docker compose down -v` reset-able.
+# host.docker.internal:1667. All runtime state lives under ./data/ as host
+# BIND MOUNTS — note `docker compose down -v` does NOT wipe them (-v removes only
+# named/anonymous volumes). A true reset deletes ./data/teamcity_server/datadir,
+# or (config-only) delete the AAASandbox project and re-run bootstrap-builds.ps1.
+# See ci/lessons-learned.md #9.
 
 services:
   teamcity-server:
