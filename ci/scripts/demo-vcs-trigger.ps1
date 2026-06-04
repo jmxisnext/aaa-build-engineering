@@ -36,12 +36,12 @@ function Get-SuperUserToken {
 if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
 if (-not $Token) { $Token = Get-SuperUserToken }
 $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
-$H = @{ Authorization = $auth; Accept = "application/json" }
+$headers = @{ Authorization = $auth; Accept = "application/json" }
 
 function Get-LatestPackageId {
     $loc = "buildType:$PackageId,count:1,defaultFilter:false,running:any,canceled:any"
     $f   = "build(id,number,state,status)"
-    $r = Invoke-RestMethod -Headers $H -Uri ("$BaseUrl/app/rest/builds?locator={0}&fields={1}" -f `
+    $r = Invoke-RestMethod -Headers $headers -Uri ("$BaseUrl/app/rest/builds?locator={0}&fields={1}" -f `
             [uri]::EscapeDataString($loc), [uri]::EscapeDataString($f))
     if ($r.count -lt 1) { return 0 }
     [int](@($r.build)[0].id)
@@ -53,8 +53,9 @@ function Wait-NewBuild([int]$Baseline, [int]$TimeoutSec) {
         if ($id -gt $Baseline) {
             do {
                 Start-Sleep -Seconds 3
-                $b = Invoke-RestMethod -Headers $H -Uri "$BaseUrl/app/rest/builds/id:$id"
+                $b = Invoke-RestMethod -Headers $headers -Uri "$BaseUrl/app/rest/builds/id:$id"
             } while ($b.state -ne 'finished' -and (Get-Date) -lt $deadline)
+            if ($b.state -ne 'finished') { return $null }   # timed out mid-build -> no clean result
             return $b
         }
         Start-Sleep -Seconds 4
@@ -89,15 +90,17 @@ function Ensure-Identities {
     Write-Host "[setup] identities + clients ready" -ForegroundColor DarkGray
 }
 function Ensure-Heartbeat {
-    $env:P4PORT = $P4d; $env:P4USER = "james"; $env:P4CLIENT = "$DenyUser-ws"
-    if (-not (& p4 files "$Stream/ci-demo/heartbeat.txt" 2>$null)) {
+    # Explicit -p/-u/-c (no $env: mutation) so a failure here can't leak port/user
+    # state into the test cases below. Seeds direct to p4d, bypassing the freeze.
+    $client = "$DenyUser-ws"
+    if (-not (& p4 -p $P4d -u james -c $client files "$Stream/ci-demo/heartbeat.txt" 2>$null)) {
         $root = Join-Path $WsRoot $DenyUser
-        & p4 sync -q "$Stream/..." 2>$null | Out-Null
+        & p4 -p $P4d -u james -c $client sync -q "$Stream/..." 2>$null | Out-Null
         $path = Join-Path $root "ci-demo\heartbeat.txt"
         New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
         Set-Content -Path $path -Value "seed"
-        & p4 add "$Stream/ci-demo/heartbeat.txt" | Out-Null
-        & p4 submit -d "ci-demo: seed heartbeat" | Out-Null   # direct to p4d, bypasses freeze
+        & p4 -p $P4d -u james -c $client add $path | Out-Null
+        & p4 -p $P4d -u james -c $client submit -d "ci-demo: seed heartbeat" | Out-Null
         Write-Host "[setup] seeded $Stream/ci-demo/heartbeat.txt" -ForegroundColor DarkGray
     }
 }
@@ -111,7 +114,9 @@ function Invoke-CaseA {
     & p4 edit "$Stream/ci-demo/heartbeat.txt" | Out-Null
     Add-Content (Join-Path (Join-Path $WsRoot $AllowUser) "ci-demo\heartbeat.txt") ("ping {0}" -f (Get-Date).ToString("s"))
     $out = & p4 submit -d "ci-demo: case A allowed submit" 2>&1
-    if ($LASTEXITCODE -ne 0) { Write-Host "  FAIL: allowlisted submit was blocked:`n$out" -ForegroundColor Red; return $false }
+    $submitOk = $LASTEXITCODE -eq 0
+    & p4 revert "$Stream/ci-demo/heartbeat.txt" 2>$null | Out-Null   # clean either way (no-op once submitted)
+    if (-not $submitOk) { Write-Host "  FAIL: allowlisted submit was blocked:`n$out" -ForegroundColor Red; return $false }
     Write-Host "  submit OK through broker; waiting up to ${FireTimeoutSec}s for the chain..."
     $b = Wait-NewBuild $baseline $FireTimeoutSec
     if (-not $b)                  { Write-Host "  FAIL: no new Package build fired" -ForegroundColor Red; return $false }
