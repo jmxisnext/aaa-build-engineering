@@ -32,6 +32,10 @@ accel/extern/
 # Track 4 dashboard: bench -Json emits the collector reads (re-generatable)
 accel/.metrics/
 
+# Track 4 (unreal): UBT build logs + metric emits (re-generatable; logs are large)
+unreal/.logs/
+unreal/.metrics/
+
 # OS / editor noise
 Thumbs.db
 .DS_Store
