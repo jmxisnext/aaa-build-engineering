@@ -2,6 +2,9 @@
 # All of it is regenerable from docker compose up; none of it belongs in git.
 /data/
 
+# Local pre-reset backups of /data/ (snapshots before a destructive reset).
+/localbak/
+
 # The seed-snapshot tree has its own Data/ directory for cooker fixtures.
 # It is not the TeamCity runtime mount; track it normally.
 !samples/**/Data/
