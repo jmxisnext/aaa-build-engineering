@@ -15,6 +15,7 @@ Assert-Equal 'Smoke Test' $ciBuilds[0].config 'maps buildType name -> config'
 Assert-Equal 45           $ciBuilds[0].cl     'maps revision version -> cl'
 Assert-Equal 'FAILURE'    $ciBuilds[0].status 'maps status'
 Assert-True  ($ciBuilds[0].durationSec -ge 1 -and $ciBuilds[0].durationSec -le 2) 'duration = finish - start (~1s)'
+Assert-Equal '2026-06-04T16:58:47Z' $ciBuilds[0].finishUtc 'normalizes finishUtc to ISO-8601 (render needs [datetime]-parseable)'
 
 # ConvertFrom-P4Streams: 'p4 streams' text -> stream objects
 $p4 = @'

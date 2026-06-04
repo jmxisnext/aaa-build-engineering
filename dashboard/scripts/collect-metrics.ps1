@@ -21,15 +21,15 @@ function ConvertFrom-TcBuilds {
     param([object[]]$Builds)
     foreach ($b in $Builds) {
         $cl = if ($b.revisions.revision) { [int](@($b.revisions.revision)[0].version) } else { $null }
-        $dur = $null
-        if ($b.startDate -and $b.finishDate) {
-            $fmt = "yyyyMMddTHHmmsszzz"
-            try {
-                $s = [datetimeoffset]::ParseExact(($b.startDate  -replace '(\+\d{2})(\d{2})$','$1:$2'), $fmt, $null)
-                $f = [datetimeoffset]::ParseExact(($b.finishDate -replace '(\+\d{2})(\d{2})$','$1:$2'), $fmt, $null)
-                $dur = [math]::Round(($f - $s).TotalSeconds, 2)
-            } catch { $dur = $null }
-        }
+        # TeamCity emits compact 'yyyyMMddTHHmmsszzz' (e.g. 20260604T192354+0000).
+        # Parse start/finish to DateTimeOffset once, then derive BOTH durationSec
+        # AND an ISO-8601 finishUtc -- the snapshot schema (see the fixture) is ISO,
+        # and the render does [datetime]$finishUtc, which can't parse the raw form.
+        $fmt = "yyyyMMddTHHmmsszzz"
+        $sOff = if ($b.startDate)  { try { [datetimeoffset]::ParseExact(($b.startDate  -replace '(\+\d{2})(\d{2})$','$1:$2'), $fmt, $null) } catch { $null } } else { $null }
+        $fOff = if ($b.finishDate) { try { [datetimeoffset]::ParseExact(($b.finishDate -replace '(\+\d{2})(\d{2})$','$1:$2'), $fmt, $null) } catch { $null } } else { $null }
+        $dur = if ($sOff -and $fOff) { [math]::Round(($fOff - $sOff).TotalSeconds, 2) } else { $null }
+        $finishUtc = if ($fOff) { $fOff.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ') } else { $b.finishDate }
         [pscustomobject]@{
             config      = $b.buildType.name
             number      = [int]$b.number
@@ -37,7 +37,7 @@ function ConvertFrom-TcBuilds {
             status      = $b.status
             statusText  = $b.statusText
             durationSec = $dur
-            finishUtc   = $b.finishDate
+            finishUtc   = $finishUtc
             url         = $b.webUrl
         }
     }
