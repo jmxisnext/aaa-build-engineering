@@ -11,7 +11,6 @@ param(
     [string]$BaseUrl      = "http://localhost:8111",
     [string]$ProjectId    = "AAASandbox",
     [string]$PackageId    = "AAASandbox_Package",
-    [string]$VcsRootId    = "AAASandbox_GameMainStream",
     [string]$HookUser     = "ci-hook",
     [string]$TokenName    = "p4-commit-hook",
     [string]$P4Port       = "localhost:1666",
@@ -66,14 +65,12 @@ function Ensure-HookUser {
     Write-Host "[role]   PROJECT_DEVELOPER @ p:$ProjectId" -ForegroundColor Green
 }
 function New-HookToken {
-    # TeamCity 2023+ restricts token minting to the owning user (self-service only).
-    # Workaround: set a bootstrap password on ci-hook, authenticate as ci-hook to
-    # mint its own token, then clear the password. The bootstrap password is random
-    # and lives only in memory for the duration of this function.
-    # TC 2026.1 REST restricts token minting to the owning user (self-service only).
-    # Strategy: set a random bootstrap password on ci-hook via superuser, authenticate
-    # as ci-hook to mint its own durable bearer token, then clear the password so
-    # ci-hook has no password-based login path going forward.
+    # TeamCity 2023+ restricts token minting to the owning user (self-service only),
+    # so POST .../tokens as the superuser returns 403. Workaround: set a random
+    # bootstrap password on ci-hook via the superuser, authenticate AS ci-hook to mint
+    # its own durable bearer token, then clear the password in a finally so ci-hook has
+    # no password-based login path. The bootstrap password is random and lives only in
+    # memory for this function's duration.
     $bootPw   = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Max 256) }))
     $suAuth   = $auth   # superuser auth from outer scope
     $hookAuth = "Basic " + [Convert]::ToBase64String(
@@ -125,7 +122,9 @@ function Ensure-VcsTrigger {
 
 # ---------- 3. p4d change-commit trigger ----------
 function Ensure-P4Trigger {
-    $current = (& p4 -p $P4Port -u $P4User triggers -o) -join "`n"
+    # TrimEnd: `triggers -o` ends with a newline; trimming it prevents a blank line
+    # creeping between the `Triggers:` header and our appended entry on write-back.
+    $current = ((& p4 -p $P4Port -u $P4User triggers -o) -join "`n").TrimEnd()
     if ($current -match 'check-for-changes-teamcity') {
         Write-Host "[skip]   p4d change-commit trigger present" -ForegroundColor DarkGray
         return
