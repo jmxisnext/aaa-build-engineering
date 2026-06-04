@@ -109,11 +109,12 @@ block or fail a submit.
 
 ```
 ci/scripts/
-  setup-vcs-trigger.ps1     # NEW  idempotent: mint token + VCS trigger + install p4d trigger
+  setup-vcs-trigger.ps1     # NEW  idempotent: deploy + mint token + VCS trigger + install p4d trigger
   demo-vcs-trigger.ps1      # NEW  policy-gated end-to-end verification (the demo artifact)
 perforce/triggers/
-  notify-teamcity.ps1       # NEW  the change-commit hook (runs on the p4d host)
-  README.md                 # NEW  what it is, how to (re)install, loop-safety invariant
+  notify-teamcity.ps1       # NEW  change-commit hook; deployed to C:\PerforceSandbox\triggers\ by deploy.ps1
+  deploy.ps1                # MODIFY  existing helper — also deploy notify-teamcity.ps1
+  README.md                 # MODIFY (additive) existing doc — fold in the hook + loop-safety note
 ci/lessons-learned.md       # +#7  post-commit hook: topology + durable-auth gotchas
 ci/README.md                # ~    document the trigger + demo
 SEEDS.md                    # +    pre-flight gated builds = next lever
@@ -128,8 +129,11 @@ supersedes the earlier "add to .gitignore" note from the design discussion.)
 
 The one script that makes a fresh machine (or a post-`down -v` stack) instant-CI-ready.
 Auth for its own REST calls via the superuser-scrape (same as `bootstrap-builds.ps1`).
-Three idempotent actions:
+Idempotent, re-runnable actions:
 
+0. **Deploy the hook** by invoking `perforce/triggers/deploy.ps1`, which copies
+   `notify-teamcity.ps1` to `C:\PerforceSandbox\triggers\` — the existing
+   deploy-then-register convention, so the git-repo path stays non-load-bearing.
 1. **Mint a durable token.** Ensure TeamCity user `ci-hook` exists
    (`POST /app/rest/users`), assign it the `PROJECT_DEVELOPER` role scoped to project
    `AAASandbox` (`POST /app/rest/users/username:ci-hook/roles`), then mint a token
@@ -143,10 +147,10 @@ Three idempotent actions:
    changes; the server's scheduled VCS check (~60s default) is the fallback path, and
    the hook forces an immediate check on top of it.
 3. **Install the p4d `change-commit` trigger** (`p4 -p localhost:1666 triggers -i`,
-   run as super `james`), skip-if-present:
+   run as super `james`), referencing the **deployed** script path, skip-if-present:
 
    ```
-   check-for-changes-teamcity change-commit //game/main/... "pwsh -NoProfile -File J:/jammers-lab/aaa-build-engineering/perforce/triggers/notify-teamcity.ps1 %change%"
+   check-for-changes-teamcity change-commit //game/main/... "pwsh -NoProfile -File C:\PerforceSandbox\triggers\notify-teamcity.ps1 %change%"
    ```
 
 ### 5.2 `notify-teamcity.ps1`

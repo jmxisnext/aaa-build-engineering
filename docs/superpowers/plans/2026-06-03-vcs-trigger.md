@@ -24,9 +24,10 @@
 
 | File | Responsibility |
 |---|---|
-| `perforce/triggers/notify-teamcity.ps1` | **NEW.** The change-commit hook. Runs on the p4d host per commit; sleeps 10s, POSTs `commitHookNotification` with the durable Bearer token, logs, always `exit 0`. |
-| `perforce/triggers/README.md` | **NEW.** What the trigger is, how to (re)install, the loop-safety invariant. |
-| `ci/scripts/setup-vcs-trigger.ps1` | **NEW.** Idempotent installer: mint durable token for `ci-hook`, add the VCS trigger to Package, install the p4d change-commit trigger. |
+| `perforce/triggers/notify-teamcity.ps1` | **NEW.** The change-commit hook. Canonical source in git; **deployed** to `C:\PerforceSandbox\triggers\` by `deploy.ps1`. Runs on the p4d host per commit; sleeps 10s, POSTs `commitHookNotification` with the durable Bearer token, logs, always `exit 0`. |
+| `perforce/triggers/README.md` | **MODIFY (additive).** Pre-existing file documenting `require-engine-tag.py` + `deploy.ps1`; restore that and fold in the notify-teamcity hook + loop-safety invariant. |
+| `perforce/triggers/deploy.ps1` | **MODIFY.** Pre-existing helper that copies `*.py` triggers to `C:\PerforceSandbox\triggers\`; extend it to also deploy `notify-teamcity.ps1` (excluding itself). |
+| `ci/scripts/setup-vcs-trigger.ps1` | **NEW.** Idempotent installer: run `deploy.ps1`, mint durable token for `ci-hook`, add the VCS trigger to Package, install the p4d change-commit trigger pointing at the **deployed** script path. |
 | `ci/scripts/demo-vcs-trigger.ps1` | **NEW.** Policy-gated end-to-end verification (the demo artifact + self-test). |
 | `ci/lessons-learned.md` | **MODIFY.** Append lesson #7 (durable token + topology-driven endpoint choice). |
 | `ci/README.md` | **MODIFY.** Document the trigger + how to run the demo. |
@@ -225,7 +226,8 @@ param(
     [string]$P4Port       = "localhost:1666",
     [string]$P4User       = "james",
     [string]$TriggerHome  = "C:\PerforceSandbox\triggers",
-    [string]$NotifyScript = "J:\jammers-lab\aaa-build-engineering\perforce\triggers\notify-teamcity.ps1"
+    [string]$RepoTriggers = "J:\jammers-lab\aaa-build-engineering\perforce\triggers",
+    [string]$NotifyScript = "C:\PerforceSandbox\triggers\notify-teamcity.ps1"   # the DEPLOYED path
 )
 $ErrorActionPreference = "Stop"
 
@@ -249,6 +251,14 @@ function Invoke-TC {
         $h["Content-Type"] = $ContentType
     }
     Invoke-RestMethod @p
+}
+
+# ---------- 0. deploy trigger scripts to the path p4d reads from ----------
+# Follows the existing perforce/triggers/deploy.ps1 convention so the live
+# trigger references C:\PerforceSandbox\triggers\ — the git-repo path stays
+# non-load-bearing. Idempotent (Copy -Force).
+function Invoke-Deploy {
+    & (Join-Path $RepoTriggers "deploy.ps1")
 }
 
 # ---------- 1. durable token for a least-privilege ci-hook user ----------
@@ -304,6 +314,7 @@ function Ensure-P4Trigger {
 }
 
 Write-Host "VCS-trigger setup at $BaseUrl" -ForegroundColor Cyan
+Invoke-Deploy
 Ensure-HookUser
 New-HookToken
 Ensure-VcsTrigger
