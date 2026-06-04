@@ -108,7 +108,8 @@ if (-not $lyra) {
     'D:\UnrealProjects', 'G:\', 'D:\'
   ) | Where-Object { Test-Path $_ }
   foreach ($root in $roots) {
-    $u = Get-ChildItem -Path $root -Filter 'LyraStarterGame.uproject' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+    # the sample folder is 'LyraStarterGame' but the project file is 'Lyra.uproject'
+    $u = Get-ChildItem -Path $root -Filter 'Lyra*.uproject' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
          Select-Object -First 1
     if ($u) { $lyra = $u.FullName; break }
   }
@@ -117,7 +118,7 @@ if ($lyra -and (Test-Path $lyra)) {
   Add-Check 'Lyra project' $true $lyra
 } else {
   Add-Check 'Lyra project' $false `
-    'LyraStarterGame.uproject not found (Launcher: Library/Vault -> Lyra -> Create Project to G:\UnrealProjects; or pass -LyraUproject)'
+    'Lyra*.uproject not found (Launcher: Library/Vault -> Lyra -> Create Project to G:\UnrealProjects; or pass -LyraUproject)'
 }
 
 # --- report ---
