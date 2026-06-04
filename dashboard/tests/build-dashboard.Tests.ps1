@@ -21,4 +21,28 @@ Assert-Match '^<svg'            $bars 'bars is an svg'
 Assert-Match '4\.0x'            $bars 'bars renders the /MP label text'
 Assert-Match '28x'             $bars 'bars renders the unity label text'
 
+# ---- full render on the committed fixture ----
+$snap = Get-Content (Join-Path $here "..\data\snapshot.fixture.json") -Raw | ConvertFrom-Json
+$html = Get-DashboardHtml -Snapshot $snap
+
+Assert-Match '<!doctype html>'                 $html 'is an html document'
+Assert-Match 'AAA Build Pipeline'              $html 'has the title'
+Assert-Match 'CI BUILDS'                        $html 'has the CI panel'
+Assert-Match 'ACCEL'                            $html 'has the accel panel'
+Assert-Match 'PERFORCE'                         $html 'has the perforce panel'
+Assert-Match 'CL\s*45|>45<'                     $html 'renders a changelist number'
+Assert-Match 'hoops-brawl-cl44'                 $html 'renders a build statusText'
+Assert-Match 'row-fail|class=.fail'             $html 'failure build gets a fail style hook'
+Assert-Match '//game/main'                      $html 'renders the perforce stream graph'
+Assert-Match 'validate-submit'                  $html 'renders a perforce trigger'
+# self-contained: no external script/style/CDN (xmlns + localhost build links are OK)
+Assert-NotMatch '<script'                       $html 'no <script> tags'
+Assert-NotMatch '<link\s'                       $html 'no <link> stylesheet refs'
+Assert-NotMatch 'https://'                      $html 'no https CDN refs'
+Assert-NotMatch 'cdn|googleapis|unpkg|jsdelivr' $html 'no known CDN hosts'
+# determinism: two renders of the same snapshot are byte-identical
+$html2 = Get-DashboardHtml -Snapshot $snap
+Assert-Equal $html.Length $html2.Length 'render is deterministic (same length)'
+Assert-True  ($html -ceq $html2)        'render is deterministic (byte-identical)'
+
 Assert-Summary
