@@ -54,7 +54,7 @@ function Cache-Stats {
     return @{ Count = ($files | Measure-Object).Count; MB = [math]::Round(($sum / 1MB), 2) }
 }
 
-function New-StreamClient([string]$name, [string]$root, [string]$stream) {
+function New-StreamClient([string]$name, [string]$root, [string]$stream, [string]$port = $ProxyPort) {
     New-Item -ItemType Directory -Path $root -Force | Out-Null
     @"
 Client: $name
@@ -64,34 +64,35 @@ Options: noallwrite noclobber nocompress unlocked nomodtime normdir
 SubmitOptions: submitunchanged
 LineEnd: local
 Stream: $stream
-"@ | & $P4 -p $ProxyPort client -i | Out-Null
+"@ | & $P4 -p $port client -i | Out-Null
 }
 
 try {
     Write-Host "== p4p proxy cache demo ==" -ForegroundColor Cyan
 
-    # 0. Fresh proxy cache --------------------------------------------------
-    & "$ProxyDir\stop-p4p.ps1" | Out-Null
-    Remove-Item "$CacheDir\*" -Recurse -Force -ErrorAction SilentlyContinue
-    & "$ProxyDir\start-p4p.ps1" | Out-Null
-
-    # 0b. Optional: seed WAN-realistic binary fixtures ----------------------
+    # 0. Optional: seed WAN-realistic binary fixtures DIRECT to the server ---
+    #    (port :1666, NOT the proxy) so seeding does not pre-warm the cache —
+    #    we want it empty when client A starts so the FILL is visible.
     if ($SeedMB -gt 0) {
-        Write-Host "Seeding $SeedMB MB of binary fixtures into //game/main/Content/proxy-fixture/ ..."
-        New-StreamClient $SEED_CLIENT $SEED_ROOT "//game/main"
-        & $P4 -p $ProxyPort -c $SEED_CLIENT sync -q | Out-Null
+        Write-Host "Seeding $SeedMB MB of binary fixtures into //game/main/Content/proxy-fixture/ (direct to server) ..."
+        New-StreamClient $SEED_CLIENT $SEED_ROOT "//game/main" "localhost:1666"
         $dir = "$SEED_ROOT\Content\proxy-fixture"; New-Item -ItemType Directory -Path $dir -Force | Out-Null
         for ($i = 1; $i -le 5; $i++) {
             $bytes = New-Object byte[] ([int]([math]::Ceiling($SeedMB / 5.0)) * 1MB)
             (New-Object Random).NextBytes($bytes)
             $fp = "$dir\asset_$i.bin"; [IO.File]::WriteAllBytes($fp, $bytes)
-            & $P4 -p $ProxyPort -c $SEED_CLIENT add -t binary $fp | Out-Null
+            & $P4 -p "localhost:1666" -c $SEED_CLIENT add -t binary $fp | Out-Null
             $seededPaths += "//game/main/Content/proxy-fixture/asset_$i.bin"
         }
-        & $P4 -p $ProxyPort -c $SEED_CLIENT submit -d "proxy demo: binary fixtures [large-ok]" | Out-Null
+        & $P4 -p "localhost:1666" -c $SEED_CLIENT submit -d "proxy demo: binary fixtures [large-ok]" | Out-Null
     }
 
-    # 1. Two consumers, two roots ------------------------------------------
+    # 1. Fresh proxy with an EMPTY cache (after any seeding) ----------------
+    & "$ProxyDir\stop-p4p.ps1" | Out-Null
+    Remove-Item "$CacheDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+    & "$ProxyDir\start-p4p.ps1" | Out-Null
+
+    # 2. Two consumers, two roots ------------------------------------------
     New-StreamClient $A_CLIENT $A_ROOT "//game/main"
     New-StreamClient $B_CLIENT $B_ROOT "//game/main"
 
@@ -123,10 +124,15 @@ try {
     Get-Content "C:\PerforceSandbox\proxy\p4p.log" -Tail 6 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
 }
 finally {
-    foreach ($c in @($A_CLIENT, $B_CLIENT, $SEED_CLIENT)) {
+    # only clean up clients that were actually created (the seed client exists
+    # only when -SeedMB was used) so the happy path doesn't error on a missing client
+    $cleanupClients = @($A_CLIENT, $B_CLIENT)
+    if ($SeedMB -gt 0) { $cleanupClients += $SEED_CLIENT }
+    foreach ($p in $seededPaths) { & $P4 -p $ProxyPort obliterate -y $p 2>&1 | Out-Null }
+    foreach ($c in $cleanupClients) {
         & $P4 -p $ProxyPort -c $c revert //... 2>&1 | Out-Null
         & $P4 -p $ProxyPort client -d $c 2>&1 | Out-Null
     }
-    foreach ($p in $seededPaths) { & $P4 -p $ProxyPort obliterate -y $p 2>&1 | Out-Null }
     Remove-Item $A_ROOT, $B_ROOT, $SEED_ROOT -Recurse -Force -ErrorAction SilentlyContinue
+    $global:LASTEXITCODE = 0   # cleanup noise must not mask a PASS
 }

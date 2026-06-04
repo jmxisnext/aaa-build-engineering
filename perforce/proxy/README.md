@@ -93,9 +93,21 @@ localhost, so the *time* saved is tiny — the demo proves the cache *mechanism*
 master. Same point the roadmap makes about overhead-bound parallelism on one
 box: demonstrate the mechanism honestly, name the hardware limit.
 
-## Status
+## Status — LIVE (verified 2026-06-04)
 
 - [x] Harness complete — `start-p4p.ps1`, `stop-p4p.ps1`, `demo-proxy.ps1`, this doc.
-- [ ] **Download `p4p.exe`** (human-gated; command above) — the one step between
-      here and a live proxy.
-- [ ] Run `demo-proxy.ps1` to capture live cache-fill/hit numbers.
+- [x] `p4p.exe` downloaded — `P4P/NTX64/2025.2/2907753`, version-matched to the server.
+- [x] Proxy stood up on `:1668`→`:1666`; `demo-proxy.ps1` passes end-to-end.
+
+Captured run — `demo-proxy.ps1 -SeedMB 50` (50 MB of binary fixtures, the workload-tier knob):
+
+| stage | cache | note |
+|---|---|---|
+| before | 0 files / 0 MB | empty cache |
+| after client **A** sync | 19 files / 50.04 MB | FILLED from upstream in 0.9 s |
+| after client **B** sync | 19 files / 50.04 MB | **grew by 0 — all cache hits** in 0.2 s |
+
+Client B's entire sync was served from the proxy cache: **zero upstream fetches**.
+Even on a single box (proxy and master both on localhost) the cached sync was
+~4.5× faster (0.2 s vs 0.9 s); across a real WAN that gap — and the bytes that
+never re-cross the link — is the whole point.

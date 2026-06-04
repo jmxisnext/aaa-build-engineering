@@ -82,11 +82,12 @@ Ryzen 7 7800X3D (8c/16t) · 31 GB RAM · **RTX 3060 12 GB** · F: 2.8 TB free.
 
 1. **Finalize Track 1** — `p4p` proxy (`:1668`→`:1666`) + cache-hit demo; live `p4 streams`
    snapshot in `depot-layout.md`; change-submit validation trigger (opp #5). [~½–1 session]
-   → **2026-06-04: mostly done.** ✅ live `p4 streams`/`p4 depots` snapshot embedded in
+   → **2026-06-04: DONE.** ✅ live `p4 streams`/`p4 depots` snapshot embedded in
    `depot-layout.md`. ✅ `validate-submit.py` (`change-content`) depot-hygiene trigger +
-   self-cleaning `demo-validate-submit.ps1` (5/5 cases) — **opp #5 closed**. ◐ p4p proxy
-   **harness complete** (`perforce/proxy/`), but the `p4p.exe` download is human-gated
-   (agent auto-download blocked) — one approved fetch + `demo-proxy.ps1` from a live proxy.
+   self-cleaning `demo-validate-submit.ps1` (5/5 cases) — **opp #5 closed**. ✅ p4p proxy
+   **live** on `:1668`→`:1666` (`perforce/proxy/`); `demo-proxy.ps1 -SeedMB 50` verified
+   cache-fill→hit (50 MB cached, client B = 0 upstream fetches). Track 1 now at ~100%;
+   next is Phase 1 step 2 (Track 2 version-stamp + build-failure notification).
 2. **Finalize Track 2 core** — version-stamp Package with the P4 changelist # (S);
    build-failure notification, file-write or TeamCity rule (S–M). [~½ session]
 3. **Finalize Track 3** — adopt **bgfx `examples/common`** → real before/after numbers;
