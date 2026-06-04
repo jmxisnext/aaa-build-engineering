@@ -55,10 +55,15 @@ if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
 if (-not $Token) { $Token = Get-SuperUserToken }
 
 $authHeader = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
-$headers = @{
-    Authorization = $authHeader
-    Accept        = "application/json"
-}
+
+# TeamCity 2026.x rejects session-authenticated *writes* (POST/PUT/DELETE) that
+# carry no CSRF token — HTTP 403 "failed CSRF check". (Latent before: a re-run
+# against an already-built server only does GETs, which are exempt; it only bites
+# the from-scratch create path.) Fix: open one web session, fetch the CSRF token
+# once from /authenticationTest.html?csrf, and send it as X-TC-CSRF-Token on every
+# mutating request. GETs don't need it but ride the same session. (lesson #10)
+$csrfToken = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
+    -Headers @{ Authorization = $authHeader } -SessionVariable tcSession
 
 # ---------- REST helpers ----------
 
@@ -81,10 +86,15 @@ function Invoke-TC {
         Authorization = $authHeader
         Accept        = $Accept
     }
+    # CSRF token required on writes (see note above); harmless on GETs.
+    if ($Method -in @("POST", "PUT", "DELETE")) {
+        $reqHeaders["X-TC-CSRF-Token"] = $csrfToken
+    }
     $reqParams = @{
-        Method  = $Method
-        Uri     = "$BaseUrl$Path"
-        Headers = $reqHeaders
+        Method     = $Method
+        Uri        = "$BaseUrl$Path"
+        Headers    = $reqHeaders
+        WebSession = $tcSession
     }
     if ($null -ne $Body) {
         $reqParams.Body = if ($Body -is [string]) {
@@ -251,6 +261,29 @@ function Set-ArtifactRules {
 # Order matters: configs are created top-to-bottom and each may
 # reference upstream IDs declared above it.
 
+# Version-stamp step for Package: write the build's provenance into the staged
+# tree so the shipped artifact self-reports which P4 changelist it was built from.
+# TeamCity substitutes %build.vcs.number% (= the Perforce changelist for the
+# stream VCS root), %build.number%, and %teamcity.build.id% before the agent runs
+# this. NOTE the doubled %% in the date format: TeamCity treats a single % as the
+# start of a parameter reference, so a bare `date +%Y...` would be mangled into a
+# bogus %Y...% lookup — `%%` is the documented escape for a literal % (lesson #11).
+$versionStampScript = @'
+mkdir -p dist
+cat > dist/build-info.json <<EOF
+{
+  "project": "hoops-brawl",
+  "p4_changelist": "%build.vcs.number%",
+  "teamcity_build_number": "%build.number%",
+  "teamcity_build_id": "%teamcity.build.id%",
+  "built_at_utc": "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)",
+  "chain": "Compile -> SmokeTest||CookData -> Package"
+}
+EOF
+echo "---- build-info.json (P4 changelist stamp) ----"
+cat dist/build-info.json
+'@
+
 $configs = @(
     @{
         Id            = "AAASandbox_Compile"
@@ -291,16 +324,21 @@ $configs = @(
         Id            = "AAASandbox_Package"
         Name          = "Package"
         Steps         = @(
-            @{ Name = "stage";      Script = "cmake --install build --prefix dist" }
-            @{ Name = "bundle pak"; Script = "cp Cooked.pak dist/Cooked.pak" }
-            @{ Name = "tarball";    Script = "tar czf hoops-brawl.tar.gz dist" }
+            @{ Name = "stage";         Script = "cmake --install build --prefix dist" }
+            @{ Name = "bundle pak";    Script = "cp Cooked.pak dist/Cooked.pak" }
+            @{ Name = "version stamp"; Script = $versionStampScript }
+            # rm stale tarballs first: the agent reuses its checkout dir across builds,
+            # so a previous build's hoops-brawl-cl<N>.tar.gz would otherwise linger and
+            # get swept up by the glob artifact rule (published two tarballs once). (lesson #12)
+            @{ Name = "tarball";       Script = "rm -f hoops-brawl-cl*.tar.gz; tar czf hoops-brawl-cl%build.vcs.number%.tar.gz dist" }
         )
         SnapshotDeps  = @("AAASandbox_SmokeTest", "AAASandbox_CookData")
         ArtifactDeps  = @(
             @{ UpstreamId = "AAASandbox_Compile";  PathRules = "build.zip!** => build" }
             @{ UpstreamId = "AAASandbox_CookData"; PathRules = "Cooked.pak" }
         )
-        ArtifactRules = "+:hoops-brawl.tar.gz"
+        # glob so the changelist-stamped tarball name (hoops-brawl-cl<N>.tar.gz) is captured
+        ArtifactRules = "+:hoops-brawl-cl*.tar.gz"
     }
 )
 

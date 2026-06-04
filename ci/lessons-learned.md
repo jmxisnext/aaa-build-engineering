@@ -535,4 +535,114 @@ against an actually-empty project. The lesson: never trust a reset you haven't r
 the wiped state, and know whether your state is a volume or a bind mount before you bet
 recovery on `-v`."*
 
+## 10. TeamCity 2026.x rejects session-authenticated writes without a CSRF token
+
+**What happened:** `bootstrap-builds.ps1` had run clean for months, then a `-Recreate`
+against a server whose `AAASandbox` project had been deleted blew up on the very first
+write — `POST /app/rest/projects` returned **403 Forbidden**: *"failed CSRF check:
+authenticated POST request is made, but neither tc-csrf-token parameter nor
+X-TC-CSRF-Token header are provided."* Every prior run had only ever hit `[skip]`
+GET paths (the project already existed), so the writes were never exercised — the bug
+was latent and only the from-scratch create path triggers it.
+
+**Root cause:** Authenticating with the superuser token over Basic auth establishes a
+server session, and TeamCity 2026.x enforces CSRF protection on session-authenticated
+**mutating** requests (POST/PUT/DELETE). GETs are exempt, which is exactly why a re-run
+against a populated server never saw it. The error message itself names the fix: send a
+CSRF token, or use cookieless Bearer auth.
+
+**Fix:** open one web session, fetch the CSRF token once from
+`GET /authenticationTest.html?csrf`, and send it as `X-TC-CSRF-Token` on every write
+while reusing that session:
+
+```powershell
+$csrf = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
+    -Headers @{ Authorization = $authHeader } -SessionVariable tcSession
+# ...then on each POST/PUT/DELETE:
+$reqHeaders["X-TC-CSRF-Token"] = $csrf
+$reqParams.WebSession = $tcSession
+```
+
+A CSRF token is **per session**: `setup-vcs-trigger.ps1` authenticates as *two* identities
+(superuser for user/role/trigger creation, then `ci-hook` to mint its own token — see #7),
+so it fetches and carries **two** tokens, one per session. Both scripts patched and re-run
+clean from scratch (project + VCS root + 4-config chain rebuilt; ci-hook token re-minted;
+VCS trigger re-added).
+
+**Why a build engineer cares:** this is the canonical "latent until the reset path runs"
+failure — the automation looked healthy for months because the happy path was all GETs,
+and the write path only fires during disaster recovery, which is the worst time to discover
+it. (Compounds with #8/#9: "idempotent on a populated DB" hid a write bug just like it hid
+the missing-create bug.) When a vendor enables a security control across a version bump,
+every scripted write is a candidate breakage — and CSRF tokens being per-session means a
+multi-identity provisioning script needs one token per identity, not one global token.
+
+**Interview-ready bullet:** *"After a TeamCity bump our CI bootstrap 403'd on the first POST
+with a CSRF error — latent for months because re-runs against a populated server only did
+GETs, and CSRF only guards writes. Fix was a web session plus an X-TC-CSRF-Token header from
+/authenticationTest.html?csrf on every mutating call. The subtlety: the token is per session,
+so a script that authenticates as both the superuser and a service account needs one CSRF
+token per identity."*
+
+## 11. TeamCity eats `%` in custom script steps — `date +%Y` becomes a bogus parameter ref
+
+**What happened:** The Package **version-stamp** step writes a `build-info.json` with a UTC
+timestamp via `date -u +%Y-%m-%dT%H:%M:%SZ`. Written that way in a TeamCity *Command Line*
+step, the timestamp came out mangled — TeamCity tried to resolve `%Y-%m-%dT%H:%M:%SZ%` as a
+build parameter before the agent ever ran the script.
+
+**Root cause:** TeamCity does its own parameter substitution on `script.content` **before**
+handing it to the shell: a single `%name%` is a parameter reference. A bare `date +%Y...`
+looks exactly like the start of one, so TeamCity consumes from the first `%` to the next and
+substitutes garbage. The documented escape for a literal percent is to **double it**: `%%`.
+
+**Fix:** `date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ`. TeamCity collapses each `%%` to one `%` during
+substitution, the agent's shell then sees a normal `date` format, and the legitimate refs
+(`%build.vcs.number%`, `%build.number%`, `%teamcity.build.id%`) substitute correctly in the
+same script. Verified: the stamped manifest carries `"built_at_utc": "2026-06-04T16:55:20Z"`
+and `"p4_changelist": "29"`.
+
+**Why a build engineer cares:** any tool with its own templating layer over your build
+scripts (TeamCity `%…%`, GitLab/`$`, Jenkins `${…}`) will collide with shell/`printf`/`date`
+syntax that uses the same metacharacter. The tell is "my literal `%`/`$` vanished or turned
+into junk." Know your CI's escape (`%%` here) and reach for it whenever a script step mixes
+date formats, `printf`, or awk with the CI's own variable syntax.
+
+**Interview-ready bullet:** *"A version-stamp step's `date +%Y` came out mangled because
+TeamCity substitutes `%…%` parameters in the script before the shell runs — `%Y` looked like
+a half-open parameter ref. The fix is doubling: `%%Y`, which TeamCity collapses to a literal
+`%`. Generalizes to any CI that templates your scripts with a metacharacter your shell also
+uses."*
+
+## 12. Glob artifact rule + reused agent checkout = a stale artifact rides along
+
+**What happened:** After stamping the tarball name with the changelist
+(`hoops-brawl-cl%build.vcs.number%.tar.gz`, artifact rule `+:hoops-brawl-cl*.tar.gz`), a
+green build at CL 46 published **two** artifacts: `hoops-brawl-cl46.tar.gz` *and* a stale
+`hoops-brawl-cl29.tar.gz` from an earlier build.
+
+**Root cause:** TeamCity reuses an agent's checkout directory across builds (incremental
+checkout, keyed by build-config id). The previous build's tarball was still sitting in the
+work dir, and the **glob** artifact rule happily matched both. The version-stamped filename —
+meant to make each build's artifact identifiable — became the thing that let old artifacts
+accumulate and get re-published.
+
+**Fix:** delete stale tarballs in the tarball step before creating the new one —
+`rm -f hoops-brawl-cl*.tar.gz; tar czf hoops-brawl-cl%build.vcs.number%.tar.gz dist`. (The
+exact-CL artifact rule `+:hoops-brawl-cl%build.vcs.number%.tar.gz` would also fix the
+*publish*, but the `rm` also keeps the work dir from growing a tarball per build forever.)
+Re-verified: the next build published exactly one artifact.
+
+**Why a build engineer cares:** "clean checkout every build" is an assumption, not a default —
+TeamCity (and most CI) reuse work dirs for speed, so build steps that *create* files must not
+assume the dir started empty. Glob artifact/output rules are where this bites: they don't know
+which files this build produced vs. which were lying around. Either clean before you build, or
+make the publish rule specific enough that yesterday's output can't match it.
+
+**Interview-ready bullet:** *"Stamping the changelist into the tarball name surfaced a latent
+bug: the agent reuses its checkout dir, so a glob artifact rule swept up a previous build's
+tarball and published two. Fix was rm-ing stale tarballs in the step (and/or a per-CL exact
+artifact rule). The general lesson: CI reuses work dirs, so a step that emits files can't
+assume an empty directory, and glob publish rules will grab whatever's left over."*
+
 

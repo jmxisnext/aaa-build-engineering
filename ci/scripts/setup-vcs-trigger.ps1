@@ -31,11 +31,19 @@ if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
 if (-not $Token) { $Token = Get-SuperUserToken }
 $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
 
+# TeamCity 2026.x requires a CSRF token on session-authenticated writes (403
+# otherwise). Open a superuser session and fetch its CSRF token once; send it as
+# X-TC-CSRF-Token on every write. The ci-hook calls below open their own session
+# with their own CSRF token (a token is per-session). (lesson #10)
+$suCsrf = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
+    -Headers @{ Authorization = $auth } -SessionVariable suSession
+
 function Invoke-TC {
     param([string]$Method, [string]$Path, $Body,
           [string]$ContentType = "application/json", [string]$Accept = "application/json")
     $h = @{ Authorization = $auth; Accept = $Accept }
-    $p = @{ Method = $Method; Uri = "$BaseUrl$Path"; Headers = $h }
+    if ($Method -in @("POST", "PUT", "DELETE")) { $h["X-TC-CSRF-Token"] = $suCsrf }
+    $p = @{ Method = $Method; Uri = "$BaseUrl$Path"; Headers = $h; WebSession = $suSession }
     if ($null -ne $Body) {
         $p.Body = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 10 }
         $h["Content-Type"] = $ContentType
@@ -78,21 +86,27 @@ function New-HookToken {
 
     # Set bootstrap password via superuser (text/plain body)
     Invoke-RestMethod -Method PUT -Uri "$BaseUrl/app/rest/users/username:$HookUser/password" `
-        -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "Content-Type" = "text/plain" } `
-        -Body $bootPw | Out-Null
+        -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "Content-Type" = "text/plain"; "X-TC-CSRF-Token" = $suCsrf } `
+        -WebSession $suSession -Body $bootPw | Out-Null
+
+    # Open a ci-hook session + its own CSRF token for the self-service token calls.
+    $hookCsrf = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
+        -Headers @{ Authorization = $hookAuth } -SessionVariable hookSession
 
     try {
         # Delete stale token if present (auth as ci-hook)
         try {
             Invoke-RestMethod -Method DELETE `
                 -Uri "$BaseUrl/app/rest/users/username:$HookUser/tokens/$TokenName" `
-                -Headers @{ Authorization = $hookAuth; Accept = "application/json" } | Out-Null
+                -Headers @{ Authorization = $hookAuth; Accept = "application/json"; "X-TC-CSRF-Token" = $hookCsrf } `
+                -WebSession $hookSession | Out-Null
         } catch { }
 
         # Mint fresh token (auth as ci-hook — owner can always create their own tokens)
         $t = Invoke-RestMethod -Method POST `
             -Uri "$BaseUrl/app/rest/users/username:$HookUser/tokens/$TokenName" `
-            -Headers @{ Authorization = $hookAuth; Accept = "application/json" }
+            -Headers @{ Authorization = $hookAuth; Accept = "application/json"; "X-TC-CSRF-Token" = $hookCsrf } `
+            -WebSession $hookSession
         if (-not $t.value) { throw "token mint returned no value" }
 
         if (-not (Test-Path $TriggerHome)) { New-Item -ItemType Directory -Path $TriggerHome -Force | Out-Null }
@@ -101,8 +115,8 @@ function New-HookToken {
     } finally {
         # Clear the bootstrap password — ci-hook authenticates via bearer token only
         Invoke-RestMethod -Method DELETE -Uri "$BaseUrl/app/rest/users/username:$HookUser/password" `
-            -Headers @{ Authorization = $suAuth; Accept = "text/plain" } `
-            -ErrorAction SilentlyContinue | Out-Null
+            -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "X-TC-CSRF-Token" = $suCsrf } `
+            -WebSession $suSession -ErrorAction SilentlyContinue | Out-Null
     }
 }
 

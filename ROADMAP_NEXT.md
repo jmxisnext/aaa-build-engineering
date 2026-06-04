@@ -90,6 +90,13 @@ Ryzen 7 7800X3D (8c/16t) · 31 GB RAM · **RTX 3060 12 GB** · F: 2.8 TB free.
    next is Phase 1 step 2 (Track 2 version-stamp + build-failure notification).
 2. **Finalize Track 2 core** — version-stamp Package with the P4 changelist # (S);
    build-failure notification, file-write or TeamCity rule (S–M). [~½ session]
+   → **2026-06-04: DONE.** ✅ version-stamp — Package writes `dist/build-info.json`
+   (P4 CL via `%build.vcs.number%` + build#/id/UTC) and names the tarball
+   `hoops-brawl-cl<N>.tar.gz`; verified on real builds at CL 29/46. ✅ build-failure
+   notifier (`notify-build-failure.ps1`, file-write to `data/notifications/`) — proven by
+   a CL-45 `[DEMO-BREAK]` failing test → caught → fix-forward CL 46 → green. Bonus
+   hardening: CSRF fix on `bootstrap-builds.ps1` + `setup-vcs-trigger.ps1` (TeamCity 2026.x
+   blocks session-authed writes), tarball-staleness fix, instant-CI restored. Lessons #10–12.
 3. **Finalize Track 3** — adopt **bgfx `examples/common`** → real before/after numbers;
    `/d2cgsummary` snippet; single-file-edit compile timing. [~1 day] — *workload tier injection #1*
 4. **Build the dashboard** — aggregate the three finished tracks: CI builds + version/CL stamps +
