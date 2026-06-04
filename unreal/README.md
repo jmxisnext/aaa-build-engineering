@@ -18,7 +18,7 @@ emitting a **CL-version-stamped package** (extends the Track 2 version-stamp pat
 
 **Lyra compiles via UBT from the command line.** Then grow outward, one runnable step at a time:
 
-1. UBT compiles `LyraEditor` (Development, Win64) — *first green.* ✅ **DONE 2026-06-04** (`-NoUBA -MaxParallelActions=8`; commit-limit fight → lesson #1).
+1. UBT compiles `LyraEditor` (Development, Win64) — *first green.* ✅ **DONE 2026-06-04.** Cold baseline captured (423 actions, MPA=8): **UBA off 83.9s · UBA on 108.4s** — UBA is *slower* on a single box (lesson #3); commit-limit fight along the way (lesson #1); `-Clean`-isn't-cold trap (lesson #2).
 2. `RunUAT BuildCookRun` — cook content for Win64.
 3. `RunUAT BuildCookRun` — stage + package a shippable build.
 4. Author the above as a **BuildGraph** (`.xml`) — `RunUAT BuildGraph`.
@@ -50,13 +50,26 @@ pwsh -File unreal/scripts/check-prereqs.ps1
 ## Status
 
 - **2026-06-04:** Prereqs **3/3 green** — VS2022 17.14 · UE 5.6.1 (`G:\UnrealEngine\UE_5.6`) ·
-  Lyra (`G:\UnrealProjects\LyraStarterGame\Lyra.uproject`). **Slice #1 DONE:** `LyraEditor`
-  (Win64/Development) compiles green via `compile-lyra.ps1` — editor module DLLs link.
-  Working config: **`-NoUBA -MaxParallelActions=8`** (a cold build OOM'd on *commit-limit*
-  exhaustion, not RAM — see `lessons-learned.md` #1). **Durable fix applied:** fixed **64 GB
-  pagefile on `D:`** (commit limit 31 → ~95 GB) — **takes effect on next reboot**; after that,
-  cook/package/UBA are commit-safe and the `-NoUBA` workaround becomes optional.
-  **Caveat:** the captured 3.6 s was an *incremental* build, NOT a cold baseline — a clean
-  `-Clean` rebuild is still owed for the real number (best captured post-reboot, alongside the
-  UBA on/off comparison). Next rungs: cold baseline → `RunUAT BuildCookRun` (cook) → package →
-  BuildGraph → TeamCity.
+  Lyra (`G:\UnrealProjects\LyraStarterGame\Lyra.uproject`). **Slice #1 DONE + cold baseline
+  captured.** `LyraEditor` (Win64/Development) compiles green via `compile-lyra.ps1`, producing
+  real editor module DLLs (`UnrealEditor-LyraGame.dll`, `-LyraEditor.dll`, + plugin DLLs) and
+  `LyraEditor.target`. Installed engine → a cold build is **423 actions** (Lyra game + plugin
+  modules only; engine is prebuilt).
+
+  **Cold compile baseline** (7800X3D 8c/16t, `MaxParallelActions=8`, post-reboot stable box):
+
+  | Config | Wall clock | Action phase | Overhead |
+  |---|---|---|---|
+  | UBA **off** (`-NoUBA`) | **83.9 s** | 78.9 s | ~4.8 s |
+  | UBA **on** | **108.4 s** | 80.7 s | ~26.7 s |
+
+  **UBA is ~29% slower on a single machine** — its win is distributing to remote agents (Horde);
+  with none configured you pay ~22 s of server/CAS/detour setup for no parallel gain (lesson #3).
+  So `-NoUBA` is the right default *on this box*; UBA gets re-evaluated once there's an agent pool.
+
+  **Durable pagefile fix validated:** rebooted → commit limit **31 → 95 GB** (64 GB pagefile on
+  `D:`); UBA-on cold build now runs with **zero OOM** (lesson #1 closed). **Measurement gotcha
+  fixed:** UBT's `-Clean` is clean-*only* (a 7.3 s "success" that compiled nothing) — the script's
+  `-Clean` now clears `Intermediate\Build`+`Binaries` project-wide to force a true cold build
+  (lesson #2). Next rungs: **`RunUAT BuildCookRun`** (cook for Win64; point DDC/cook scratch at
+  `D:`) → package → BuildGraph → TeamCity.

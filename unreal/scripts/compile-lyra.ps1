@@ -16,8 +16,10 @@
       pwsh -File unreal/scripts/compile-lyra.ps1 -DryRun     # resolve paths only
 
 .NOTES
-  The first cold LyraEditor build is a full AAA-scale C++ compile (~10-30 min).
-  Exit 0 on success, non-zero otherwise. Paths with spaces: pass -Uproject quoted.
+  A cold LyraEditor build is 423 compile/link actions against the *installed* engine
+  (engine prebuilt - only the Lyra game + plugin modules compile). Measured ~84-108s on
+  a 7800X3D (8c/16t), MaxParallelActions=8. Exit 0 on success, non-zero otherwise.
+  Paths with spaces: pass -Uproject quoted.
 #>
 [CmdletBinding()]
 param(
@@ -32,7 +34,10 @@ param(
   [switch]$NoUBA,        # disable Unreal Build Accelerator (-NoUBA). UBA reserves large virtual
                          # memory; on this no-pagefile box (commit limit = 31GB) that tips
                          # cl.exe PCH allocs over the commit limit. UBA is Phase 2 step 2.
-  [switch]$Clean,        # add -Clean (force full rebuild)
+  [switch]$Clean,        # force a TRUE cold rebuild by clearing the project's build outputs.
+                         # (UBT's own -Clean is *clean-only* - removes target binaries but leaves
+                         # the obj/PCH + action-graph makefile, so the next build relinks in
+                         # seconds, NOT a cold baseline. See lessons-learned.md #2.)
   [switch]$DryRun        # resolve + print the command, do not build
 )
 $ErrorActionPreference = 'Stop'
@@ -51,13 +56,31 @@ if (-not $Uproject -or -not (Test-Path $Uproject)) { throw 'Lyra .uproject not f
 $buildArgs = @($Target, $Platform, $Configuration, "-Project=$Uproject", '-WaitMutex')
 if ($MaxParallelActions -gt 0) { $buildArgs += "-MaxParallelActions=$MaxParallelActions" }
 if ($NoUBA) { $buildArgs += '-NoUBA' }
-if ($Clean) { $buildArgs += '-Clean' }
+# NOTE: -Clean is deliberately NOT forwarded to UBT - its -Clean is clean-only (lesson #2).
+# A genuinely cold rebuild is forced below by deleting the project's build outputs.
 
 Write-Host "Engine : $EnginePath"
 Write-Host "Project: $Uproject"
 Write-Host "Build  : $Target $Platform $Configuration$(if ($Clean){' (clean)'})"
 Write-Host "Cmd    : Build.bat $($buildArgs -join ' ')"
 if ($DryRun) { Write-Host 'DryRun - not invoking Build.bat.'; exit 0 }
+
+if ($Clean) {
+  # True cold rebuild: delete the project's build outputs so every compile action re-runs.
+  # Scope is the PROJECT only (root + every project plugin) - engine dirs are never touched.
+  # Just -Clean'ing the target binaries is not enough: the obj/PCH live under each plugin's
+  # own Intermediate\Build too, and a surviving makefile lets UBT short-circuit (lesson #2).
+  $projDir = Split-Path -Parent $Uproject
+  Write-Host "Clean  : forcing COLD rebuild - clearing build outputs under $projDir"
+  Remove-Item (Join-Path $projDir 'Intermediate\Build') -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $projDir 'Binaries') -Recurse -Force -ErrorAction SilentlyContinue
+  $pluginsDir = Join-Path $projDir 'Plugins'
+  if (Test-Path $pluginsDir) {
+    Get-ChildItem $pluginsDir -Recurse -Directory -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -in 'Intermediate','Binaries' } |
+      ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+}
 
 $logDir = Join-Path $unrealDir '.logs'
 $metricDir = Join-Path $unrealDir '.metrics'
@@ -80,6 +103,8 @@ $metric = [pscustomobject]@{
   platform      = $Platform
   configuration = $Configuration
   clean         = [bool]$Clean
+  noUBA         = [bool]$NoUBA
+  maxParallel   = $MaxParallelActions
   success       = ($exit -eq 0)
   exitCode      = $exit
   durationSec   = $dur

@@ -61,3 +61,77 @@ for a build box.)
   not Task Manager's RAM gauge.
 - Fixes, cheapest → most durable: free commit (close VMs/Docker, drop UBA's reservation),
   cap `-MaxParallelActions`, then **add a pagefile** so the commit ceiling isn't physical RAM.
+
+## 2. The "cold baseline" that wasn't: `-Clean` is clean-*only*, and a 7s "success" is a no-op
+
+**What happened:** Post-pagefile, set out to capture the *real* cold `LyraEditor` compile time
+(the prior "3.6s" was a known-bad incremental). Ran `compile-lyra.ps1 -Clean` expecting a full
+rebuild. It reported **`BUILD SUCCEEDED ... in 7.3s`** — and the script dutifully logged 7.3s as
+a clean build. That number is a lie: a cold Lyra editor compile is **423 actions**, not 7 seconds.
+
+**Root cause:** UBT's `-Clean` (as passed to `Build.bat`) **only removes the target's binaries**.
+It leaves the per-module `.obj`/PCH *and* the action-graph makefile under
+`Intermediate\Build`. On the next build UBT sees a valid makefile, finds nothing out of date,
+relinks, and exits "successfully" in seconds. Inspecting disk confirmed it: after the "clean
+build," `Binaries\Win64` was **empty** and there were **zero `.obj`** — yet exit code 0. A build
+that produces no binaries but reports success is the tell that **nothing actually compiled.**
+
+**Fix (force a genuinely cold build):** delete the project's build outputs, not just the target
+binaries — `Intermediate\Build` + `Binaries` at the project root **and under every project
+plugin** (Lyra has ~14: `Plugins\GameFeatures\*` plus `GameSettings`, `CommonGame`, `CommonUser`,
+`UIExtension`, `PocketWorlds`, …, each with its *own* `Intermediate\Build`). Miss the non-
+GameFeatures plugins and ~100 stale `.obj` survive → not a cold build. `compile-lyra.ps1 -Clean`
+now does exactly this (clears outputs, then builds) instead of forwarding UBT's clean-only flag.
+With that, the cold graph rebuilds from scratch: `Creating makefile ... (no existing makefile)` →
+`Building 423 action(s)` → real DLLs (`UnrealEditor-LyraGame.dll`, etc.) + `LyraEditor.target`.
+
+**Why a build engineer cares:**
+- **A green build with a suspiciously small number is a measurement bug, not a fast build.** If a
+  "from-scratch" compile finishes in seconds, it didn't compile — verify by the *artifacts*
+  (action count, fresh binaries on disk), never by the exit code alone.
+- **"Clean" is not one operation.** Target-clean (binaries) ≠ intermediate-clean (obj/PCH) ≠
+  makefile invalidation. CI "clean build" steps that only delete binaries silently measure
+  incremental relinks and report them as cold-cache numbers.
+- Build outputs are **scattered per-module/per-plugin**, not in one tree. A reliable clean walks
+  every plugin's `Intermediate`/`Binaries`, or you get a partial-cold build with hidden cache hits.
+
+**Interview TL;DR:**
+- UBT `-Clean` = remove target binaries only; obj/PCH + makefile survive → next build is a fast
+  relink, not a cold compile. Force cold by deleting `Intermediate\Build` + `Binaries` project-wide
+  (root **and** every plugin).
+- Trust **artifacts over exit codes**: no fresh `.obj` / empty `Binaries` + "SUCCEEDED" = no-op.
+
+## 3. UBA was ~29% *slower* on a single machine — accelerators are scale-out, not free speed
+
+**What happened:** With the commit limit fixed, captured the cold `LyraEditor` baseline both ways
+(same 423 actions, `MaxParallelActions=8`, only variable = UBA):
+
+| Config | Wall clock | Action phase (executor) | Non-executor overhead |
+|---|---|---|---|
+| **UBA on**  | **108.4s** | 80.7s (UBA local executor) | ~26.7s |
+| **UBA off** (`-NoUBA`) | **83.9s** | 78.9s (Parallel executor)  | ~4.8s |
+
+UBA on was **+24.5s (~29%) slower.**
+
+**Root cause:** the *compile-action* time is nearly identical (80.7 vs 78.9s — UBA's detouring adds
+a hair per action). The entire gap is UBA's **fixed overhead**: spinning up the UBA server
+(`UbaServer - Listening on 0.0.0.0:1345`), initialising CAS storage (`Storage capacity 40Gb`),
+detour/trace plumbing, and teardown (~22s here). UBA's payoff is **distributing actions to remote
+helper agents**; with **none configured**, you pay the coordination tax for zero parallel gain.
+
+**Why a build engineer cares:**
+- **An accelerator is a horizontal-scaling tool, not a single-box turbo.** UBA / FASTBuild /
+  Incredibuild win when work is farmed to *other machines* (Horde agents). On one box with a short
+  (~80s) workload, fixed setup cost dominates and the accelerator loses to the plain parallel
+  executor. Adopt UBA **with** a Horde/agent pool, not before.
+- **Measure the regime you'll ship.** A toy single-machine benchmark would have "proven" UBA makes
+  builds slower — true here, false at farm scale. The honest number comes with its context: cores,
+  remote agents (zero), and workload size.
+- Earlier (lesson #1) UBA also *cost* via its large VA reservation under a tight commit limit. Same
+  theme: an accelerator has real fixed costs (memory, setup) you must earn back with scale.
+
+**Interview TL;DR:**
+- Single box, no remote agents: **UBA on 108s vs off 84s** — accelerator overhead (~22s server/
+  CAS/detour) isn't amortised; action time was within ~2s.
+- UBA/distributed-compile tools pay off **across machines** (Horde). Benchmark in the deployment
+  regime, or you'll draw the wrong conclusion.
