@@ -135,12 +135,15 @@ Idempotent, re-runnable actions:
    `notify-teamcity.ps1` to `C:\PerforceSandbox\triggers\` — the existing
    deploy-then-register convention, so the git-repo path stays non-load-bearing.
 1. **Mint a durable token.** Ensure TeamCity user `ci-hook` exists
-   (`POST /app/rest/users`), assign it the `PROJECT_DEVELOPER` role scoped to project
-   `AAASandbox` (`POST /app/rest/users/username:ci-hook/roles`), then mint a token
-   (`POST /app/rest/users/username:ci-hook/tokens/p4-commit-hook`). The token value is
-   returned **once** — write it to `C:\PerforceSandbox\triggers\teamcity-hook.token`.
-   Re-runnable: if the named token already exists, delete then re-create so the cred
-   file is always in sync.
+   (`POST /app/rest/users`) and holds the `PROJECT_DEVELOPER` role scoped to project
+   `AAASandbox`. Mint a durable token named `p4-commit-hook` and write its value to
+   `C:\PerforceSandbox\triggers\teamcity-hook.token`. Re-runnable: the token is
+   re-minted each run.
+   **TC 2026.1 gotcha:** token minting is *self-service only* — `POST .../tokens` as
+   the **superuser** is 403-rejected. So the installer sets a random bootstrap password
+   on `ci-hook` (as superuser), authenticates **as** `ci-hook` to mint its own token,
+   then clears the password in a `finally` (ci-hook ends up bearer-token-only). The
+   bootstrap password is random and in-memory only. (See lesson #7.)
 2. **Add the VCS trigger** to `AAASandbox_Package`
    (`POST /app/rest/buildTypes/id:AAASandbox_Package/triggers`, type `vcsTrigger`).
    Skip-if-exists. No special poll config needed: the trigger reacts to *detected*

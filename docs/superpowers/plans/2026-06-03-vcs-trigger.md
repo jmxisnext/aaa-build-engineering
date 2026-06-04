@@ -220,7 +220,6 @@ param(
     [string]$BaseUrl      = "http://localhost:8111",
     [string]$ProjectId    = "AAASandbox",
     [string]$PackageId    = "AAASandbox_Package",
-    [string]$VcsRootId    = "AAASandbox_GameMainStream",
     [string]$HookUser     = "ci-hook",
     [string]$TokenName    = "p4-commit-hook",
     [string]$P4Port       = "localhost:1666",
@@ -276,13 +275,45 @@ function Ensure-HookUser {
     Write-Host "[role]   PROJECT_DEVELOPER @ p:$ProjectId" -ForegroundColor Green
 }
 function New-HookToken {
-    # token value is returned ONCE; delete+recreate so the cred file is always valid.
-    try { Invoke-TC DELETE "/app/rest/users/username:$HookUser/tokens/$TokenName" | Out-Null } catch { }
-    $t = Invoke-TC POST "/app/rest/users/username:$HookUser/tokens/$TokenName"
-    if (-not $t.value) { throw "token mint returned no value" }
-    if (-not (Test-Path $TriggerHome)) { New-Item -ItemType Directory -Path $TriggerHome -Force | Out-Null }
-    Set-Content -Path (Join-Path $TriggerHome "teamcity-hook.token") -Value $t.value -NoNewline
-    Write-Host "[token]  minted -> $TriggerHome\teamcity-hook.token" -ForegroundColor Green
+    # TeamCity 2023+ restricts token minting to the owning user (self-service only),
+    # so POST .../tokens as the superuser returns 403. Workaround: set a random
+    # bootstrap password on ci-hook via the superuser, authenticate AS ci-hook to mint
+    # its own durable bearer token, then clear the password in a finally so ci-hook has
+    # no password-based login path. The bootstrap password is random and lives only in
+    # memory for this function's duration.
+    $bootPw   = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Max 256) }))
+    $suAuth   = $auth   # superuser auth from outer scope
+    $hookAuth = "Basic " + [Convert]::ToBase64String(
+        [Text.Encoding]::ASCII.GetBytes("${HookUser}:${bootPw}"))
+
+    # Set bootstrap password via superuser (text/plain body)
+    Invoke-RestMethod -Method PUT -Uri "$BaseUrl/app/rest/users/username:$HookUser/password" `
+        -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "Content-Type" = "text/plain" } `
+        -Body $bootPw | Out-Null
+
+    try {
+        # Delete stale token if present (auth as ci-hook)
+        try {
+            Invoke-RestMethod -Method DELETE `
+                -Uri "$BaseUrl/app/rest/users/username:$HookUser/tokens/$TokenName" `
+                -Headers @{ Authorization = $hookAuth; Accept = "application/json" } | Out-Null
+        } catch { }
+
+        # Mint fresh token (auth as ci-hook — owner can always create their own tokens)
+        $t = Invoke-RestMethod -Method POST `
+            -Uri "$BaseUrl/app/rest/users/username:$HookUser/tokens/$TokenName" `
+            -Headers @{ Authorization = $hookAuth; Accept = "application/json" }
+        if (-not $t.value) { throw "token mint returned no value" }
+
+        if (-not (Test-Path $TriggerHome)) { New-Item -ItemType Directory -Path $TriggerHome -Force | Out-Null }
+        Set-Content -Path (Join-Path $TriggerHome "teamcity-hook.token") -Value $t.value -NoNewline
+        Write-Host "[token]  minted -> $TriggerHome\teamcity-hook.token" -ForegroundColor Green
+    } finally {
+        # Clear the bootstrap password — ci-hook authenticates via bearer token only
+        Invoke-RestMethod -Method DELETE -Uri "$BaseUrl/app/rest/users/username:$HookUser/password" `
+            -Headers @{ Authorization = $suAuth; Accept = "text/plain" } `
+            -ErrorAction SilentlyContinue | Out-Null
+    }
 }
 
 # ---------- 2. VCS trigger on Package ----------
