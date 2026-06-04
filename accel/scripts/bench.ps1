@@ -25,7 +25,7 @@
   Usage:  pwsh -File .\accel\scripts\bench.ps1 [-TU 32] [-Reps 3] [-Chunks 0]
           (-Chunks 0 = auto: ~TU/4, capped at the core count)
 #>
-param([int]$TU = 32, [int]$Reps = 3, [int]$Chunks = 0)
+param([int]$TU = 32, [int]$Reps = 3, [int]$Chunks = 0, [string]$Json)
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
@@ -111,4 +111,11 @@ Write-Host ("{0,-22} {1,9} {2,11}" -f "config", "best(s)", "vs serial")
 Write-Host ("-" * 44)
 foreach ($r in $results) {
     Write-Host ("{0,-22} {1,9:N2} {2,10:N2}x" -f $r.Config, $r.Best, ($base / $r.Best))
+}
+
+if ($Json) {
+    $payload = [ordered]@{ sample='compile'; tu=$TU; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } }) }
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
+    Write-Host "wrote metrics: $Json"
 }

@@ -39,7 +39,7 @@
     pwsh -File .\accel\scripts\bench-bgfx.ps1 -Reps 1    # quick
     pwsh -File .\accel\scripts\bench-bgfx.ps1 -Probe     # just the per-TU table
 #>
-param([int]$Reps = 3, [switch]$Probe)
+param([int]$Reps = 3, [switch]$Probe, [string]$Json)
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
@@ -194,3 +194,12 @@ Write-Host "     function, and why the parse-once levers (unity's amalgamation, 
 Write-Host "     declaration-heavy PCH) are the ones that fit this workload -- not /LTCG-class"
 Write-Host "     codegen tuning. Profile before picking the lever (the Track 3 thesis)."
 Write-Host ""
+
+if ($Json) {
+    $payload = [ordered]@{ sample='bgfx'; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } })
+        incremental=@{ heavy=$tHeavy; trivial=$tTriv; unity=$tUnity }
+        profile=@{ frontendSec=$fe; backendSec=$be; cgFunctions=$cgFuncs } }
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
+    Write-Host "wrote metrics: $Json"
+}

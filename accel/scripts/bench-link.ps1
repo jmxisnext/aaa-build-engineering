@@ -31,7 +31,7 @@
 
   Usage:  pwsh -File .\accel\scripts\bench-link.ps1 [-TU 64] [-Symbols 250] [-Reps 3]
 #>
-param([int]$TU = 64, [int]$Symbols = 250, [int]$Reps = 3)
+param([int]$TU = 64, [int]$Symbols = 250, [int]$Reps = 3, [string]$Json)
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
@@ -228,4 +228,11 @@ foreach ($mult in 1, 2, 4) {
         if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
     }
     Write-Host ("{0,12} {1,9:N3} {2,9}" -f ($TU * $sw_syms), [math]::Round($best,3), (Exe-KB $exe))
+}
+
+if ($Json) {
+    $payload = [ordered]@{ sample='link'; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } }) }
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
+    Write-Host "wrote metrics: $Json"
 }

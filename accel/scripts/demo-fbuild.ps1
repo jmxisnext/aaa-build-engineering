@@ -18,7 +18,7 @@
 
   Usage:  pwsh -File .\accel\scripts\demo-fbuild.ps1 [-TU 32] [-Reps 3]
 #>
-param([int]$TU = 32, [int]$Reps = 3)
+param([int]$TU = 32, [int]$Reps = 3, [string]$Json)
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
@@ -106,3 +106,10 @@ foreach ($r in $results) {
 }
 Write-Host "`n--- FASTBuild summary of the last (no-op) run ---"
 Write-Host $script:fbOut.Trim()
+
+if ($Json) {
+    $payload = [ordered]@{ sample='fastbuild'; tu=$TU; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } }) }
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
+    Write-Host "wrote metrics: $Json"
+}
