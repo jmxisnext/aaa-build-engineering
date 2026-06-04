@@ -18,7 +18,7 @@ emitting a **CL-version-stamped package** (extends the Track 2 version-stamp pat
 
 **Lyra compiles via UBT from the command line.** Then grow outward, one runnable step at a time:
 
-1. UBT compiles `LyraEditor` (Development, Win64) — *first green.*
+1. UBT compiles `LyraEditor` (Development, Win64) — *first green.* ✅ **DONE 2026-06-04** (`-NoUBA -MaxParallelActions=8`; commit-limit fight → lesson #1).
 2. `RunUAT BuildCookRun` — cook content for Win64.
 3. `RunUAT BuildCookRun` — stage + package a shippable build.
 4. Author the above as a **BuildGraph** (`.xml`) — `RunUAT BuildGraph`.
@@ -49,8 +49,11 @@ pwsh -File unreal/scripts/check-prereqs.ps1
 
 ## Status
 
-- **2026-06-04:** Track scaffolded; prereq gate-check written + hardened to auto-find the Lyra
-  sample project on G: (`scripts/check-prereqs.ps1`). Prereqs: **VS2022 17.14 ✅** ·
-  **UE 5.6.1 ✅** (`G:\UnrealEngine\UE_5.6`, installed via the Launcher) · **Lyra ⏳**
-  (Create Project to `G:\UnrealProjects`) — **2/3 green**. Next: gate goes green → UBT compiles
-  `LyraEditor` (Development/Win64) = slice #1.
+- **2026-06-04:** Prereqs **3/3 green** — VS2022 17.14 · UE 5.6.1 (`G:\UnrealEngine\UE_5.6`) ·
+  Lyra (`G:\UnrealProjects\LyraStarterGame\Lyra.uproject`). **Slice #1 DONE:** `LyraEditor`
+  (Win64/Development) compiles green via `compile-lyra.ps1` — editor module DLLs link.
+  Working config on this 31 GB / no-pagefile box: **`-NoUBA -MaxParallelActions=8`** (a cold
+  build OOM'd on *commit-limit* exhaustion, not RAM — see `lessons-learned.md` #1).
+  **Caveat:** the captured 3.6 s was an *incremental* build, NOT a cold baseline — a clean
+  `-Clean` rebuild is still owed for the real number. Next rungs: cold baseline → `RunUAT
+  BuildCookRun` (cook) → package → BuildGraph → TeamCity.
