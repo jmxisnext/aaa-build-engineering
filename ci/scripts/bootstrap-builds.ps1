@@ -125,6 +125,69 @@ function Add-VcsRoot {
     Invoke-TC POST "/app/rest/buildTypes/id:$BuildTypeId/vcs-root-entries" -Body $body | Out-Null
 }
 
+function Test-Project {
+    param([string]$Id)
+    try { Invoke-TC GET "/app/rest/projects/id:$Id" | Out-Null; $true }
+    catch { $false }
+}
+
+function Test-VcsRoot {
+    param([string]$Id)
+    try { Invoke-TC GET "/app/rest/vcs-roots/id:$Id" | Out-Null; $true }
+    catch { $false }
+}
+
+function Remove-VcsRoot {
+    param([string]$Id)
+    Invoke-TC DELETE "/app/rest/vcs-roots/id:$Id" | Out-Null
+}
+
+# Create the project the chain lives under. Skip-if-exists. The project is the
+# most upstream dependency: build types and the VCS root are both project-scoped,
+# so this must run first. Body shape verified live (parentProject locator _Root).
+function Ensure-Project {
+    if (Test-Project -Id $ProjectId) {
+        Write-Host "[skip]   project $ProjectId (already exists)" -ForegroundColor DarkGray
+        return
+    }
+    Write-Host "[create] project $ProjectId" -ForegroundColor Green
+    $body = @{ name = "AAA Sandbox"; id = $ProjectId; parentProject = @{ locator = "_Root" } }
+    Invoke-TC POST "/app/rest/projects" -Body $body | Out-Null
+}
+
+# Create the Perforce VCS root definition (NOT the per-build-type attachment, which
+# Add-VcsRoot does). Skip-if-exists. Body is the live-verified, zero-diff-probed shape:
+# stream mode (use-client=stream, stream=//game/main), project-scoped, six properties.
+# workspace-options is column-16-aligned with spaces (PadRight 16), LF-joined — matching
+# the captured live root exactly.
+function Ensure-VcsRootDefinition {
+    if (Test-VcsRoot -Id $VcsRootId) {
+        Write-Host "[skip]   vcs-root $VcsRootId (already exists)" -ForegroundColor DarkGray
+        return
+    }
+    Write-Host "[create] vcs-root $VcsRootId" -ForegroundColor Green
+    $workspaceOptions =
+        ("Options:".PadRight(16)       + "noallwrite clobber nocompress unlocked nomodtime rmdir") + "`n" +
+        ("Host:".PadRight(16)          + "%teamcity.agent.hostname%")                               + "`n" +
+        ("SubmitOptions:".PadRight(16) + "revertunchanged")                                         + "`n" +
+        ("LineEnd:".PadRight(16)       + "local")
+    $body = @{
+        id      = $VcsRootId
+        name    = "Game Main Stream"
+        vcsName = "perforce"
+        project = @{ id = $ProjectId }
+        properties = @{ property = @(
+            @{ name = "port";              value = "host.docker.internal:1667" }
+            @{ name = "user";              value = "james" }
+            @{ name = "use-client";        value = "stream" }
+            @{ name = "stream";            value = "//game/main" }
+            @{ name = "p4-exe";            value = "p4" }
+            @{ name = "workspace-options"; value = $workspaceOptions }
+        )}
+    }
+    Invoke-TC POST "/app/rest/vcs-roots" -Body $body | Out-Null
+}
+
 function Add-Step {
     param([string]$BuildTypeId, [string]$Name, [string]$Script)
     $body = @{
