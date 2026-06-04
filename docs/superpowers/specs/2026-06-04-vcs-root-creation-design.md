@@ -1,80 +1,98 @@
-# Scripted VCS-Root Creation — Design Spec (Track 2)
+# Scripted Project + VCS-Root Creation — Design Spec (Track 2)
 
 - **Date:** 2026-06-04
 - **Track:** 2 (CI / TeamCity build engineering)
-- **Status:** Design approved, pending spec review → implementation plan
+- **Status:** Design approved (scope expanded to include the project), pending implementation plan
 - **Lever:** Make the `docker compose down -v` reset story genuinely hands-off — script the
-  creation of the `AAASandbox_GameMainStream` VCS-root *definition* so no manual TeamCity
-  UI step sits in the middle of "blow it away, rebuild instant CI."
+  two TeamCity objects the whole chain hangs off that nothing currently creates: the
+  **`AAASandbox` project** and the **`AAASandbox_GameMainStream` VCS-root definition**.
 
 ## 1. Goal / win-condition
 
-After a full `docker compose down -v`, a short sequence of **scripted** commands
-rebuilds the entire instant-CI stack with **no manual TeamCity-UI click-through**.
-The specific gap this closes: nothing in the repo *creates* the Perforce VCS-root
-definition the whole chain hangs off — it was created by hand in the UI, so after a
-volume wipe it must be recreated by hand before any script works.
+After a full `docker compose down -v` **and** the one-time TeamCity first-run setup,
+a short sequence of **scripted** commands rebuilds the entire instant-CI stack with
+**no per-reset manual UI click-through**. The gap this closes: two objects the chain
+depends on — the project and the Perforce VCS-root definition — were created by hand in
+the UI and are recreated by *nothing* in the repo, so after a volume wipe they must be
+hand-built before any script works.
 
-**Demoable artifact:** the reset story itself, proven end-to-end — delete the live
-root, run `bootstrap-builds.ps1`, and confirm it recreates a root **byte-for-byte
-identical** to the hand-made one, after which `setup-vcs-trigger.ps1` +
-`demo-vcs-trigger.ps1` pass both policy cases. "I can rebuild the studio's CI from
-an empty database in two scripts" is the interview line.
+**Demoable artifact:** the reset story proven end-to-end — on a wiped DB, run
+`bootstrap-builds.ps1` and watch it recreate the project + a root **byte-for-byte
+identical** to the hand-made one, then `setup-vcs-trigger.ps1` + `demo-vcs-trigger.ps1`
+pass both policy cases. "I can rebuild the studio's CI from an empty database in two
+scripts" is the interview line.
 
-## 2. Background / current state — the precise gap
+**Scope honesty:** "hands-off" means *after initial server setup*. Two UI actions remain
+out of scope and are stated plainly in the README (see §7/§8): the **first-run setup
+wizard** (admin account + maintenance token) and **agent authorization**.
 
-- `ci/scripts/bootstrap-builds.ps1` builds the chain (Compile → Smoke Test ‖ Cook Data
-  → Package) via the TeamCity REST API and **attaches** the VCS root to each build type:
-  its `Add-VcsRoot` POSTs `/app/rest/buildTypes/id:<bt>/vcs-root-entries` — a *vcs-root
-  **entry*** (an attachment referencing a root by id). It does **not** POST
-  `/app/rest/vcs-roots`, which is what *creates the root definition itself*.
-- The root definition `AAASandbox_GameMainStream` was created **manually** via the
-  TeamCity UI (the field table in `ci/README.md` → "Wiring to Track 1 Perforce").
-- The stack was **STOPPED, not `down -v`'d**, so the definition currently still exists
-  in the TeamCity DB — which is what let us read its exact shape (see §3).
-- After a real `down -v`, the DB is wiped → the definition is gone → `Add-VcsRoot`'s
-  attach and `setup-vcs-trigger.ps1`'s trigger both dangle against a non-existent root,
-  and the chain cannot sync. The prior VCS-trigger spec (`2026-06-03-…`, §7) claimed
-  "instant CI restored in two commands," but that was only ever true *if the root
-  survived* — which it does not. **This lever makes that claim actually true.**
-- **Documentation drift:** `ci/README.md`'s "Wiring to Track 1" table documents the root
-  as a **client mapping** (`//game/main/... //%P4CLIENT%/...`). The live root uses no
-  such mapping — it is **stream mode**. The README is wrong and is corrected as part of
-  this work. (The `2026-06-03` spec's §2 already described it correctly as stream mode;
-  only the README table drifted.)
+## 2. Background / current state — the precise gaps
+
+`ci/scripts/bootstrap-builds.ps1` builds the chain (Compile → Smoke Test ‖ Cook Data →
+Package) via the TeamCity REST API, but it **assumes two objects already exist** and
+creates neither:
+
+1. **The project.** Every `New-BuildType` POSTs `project = {id: AAASandbox}`, and
+   `Add-VcsRoot` / the root POST are project-scoped to it — but a repo-wide grep for
+   project creation (`/app/rest/projects`, `New-Project`, `parentProject`, …) returns
+   **no matches**. The live project (`id=AAASandbox`, name "AAA Sandbox", parent `_Root`)
+   was created **manually in the UI**.
+2. **The VCS-root definition.** `Add-VcsRoot` POSTs `/app/rest/buildTypes/id:<bt>/vcs-root-entries`
+   — a *vcs-root **entry*** (an attachment referencing a root by id), **not**
+   `/app/rest/vcs-roots` (which creates the definition). The live root
+   `AAASandbox_GameMainStream` was also created **manually** (the field table in
+   `ci/README.md` → "Wiring to Track 1 Perforce").
+
+The stack was **STOPPED, not `down -v`'d**, so both objects currently still exist in the
+TeamCity DB — which is what let us read their exact shapes (§3). After a real `down -v`,
+the DB is wiped → both are gone → `New-BuildType` fails with "project not found" before it
+ever reaches the chain. The prior VCS-trigger spec (`2026-06-03-…`, §7) claimed "instant CI
+restored in two commands," but that was never true — **this lever makes it true.**
+
+**Documentation drift:** `ci/README.md`'s "Wiring to Track 1" table documents the root as a
+**client mapping** (`//game/main/... //%P4CLIENT%/...`). The live root uses no mapping — it
+is **stream mode**. The README is wrong and is corrected here. (The `2026-06-03` spec's §2
+already described it correctly as stream mode; only the README table drifted.)
 
 ## 3. Verification — zero-assumption ground truth
 
-The exact root shape and the create-body were **verified against the live server**, not
-inferred from docs:
+Verified against the live server, not inferred from docs:
 
-1. Brought the (stopped, data-preserved) stack up; waited for REST to return real JSON
-   and scraped the current superuser token (last occurrence — lesson #6).
-2. `GET /app/rest/vcs-roots/id:AAASandbox_GameMainStream` → captured all six properties,
-   including the exact `workspace-options` block (char-code-inspected: column-16-aligned
-   with **spaces**, not tabs; **LF** newlines).
-3. **Non-destructive round-trip probe:** `POST`ed a throwaway `…_probe` root with the
-   candidate body, `GET` it back, diffed property-by-property against the live root, then
-   `DELETE`d the probe. Result: **ZERO diffs across all six properties** — a from-scratch
-   scripted root reproduces the hand-made one exactly. The live working root was never
-   touched.
+- **VCS root (fully proven):** `GET`'d the live root; captured all six properties incl. the
+  exact `workspace-options` block (char-code-inspected: column-16-aligned with **spaces**,
+  not tabs; **LF** newlines). Then a **non-destructive round-trip probe** — `POST` a
+  throwaway `…_probe` root with the candidate body, `GET` it back, diff vs live, `DELETE`
+  the probe — showed **ZERO diffs across all six properties**. The live root was never
+  touched.
+- **Project (shape confirmed, body to probe in plan):** `GET`'d the live project →
+  `id=AAASandbox`, `name="AAA Sandbox"`, `parentProject=_Root`. The candidate create-body
+  (§4) is simple; the plan's pre-flight runs the same throwaway round-trip to confirm it
+  before relying on it.
+- **Attachment count (for `-Recreate`, §9):** the live root is referenced by **4 build
+  types** (Compile, SmokeTest, CookData, Package).
 
-**Harness note (not a product concern):** the literal token `rmdir` inside the
-`workspace-options` value (a Perforce client option, `…nomodtime rmdir`) trips the
-agent sandbox's destructive-command guard *when a REST snippet containing it is run as an
-ad-hoc shell command*. Inside the committed `bootstrap-builds.ps1` executed via
-`pwsh -File`, the guard scans the command line, not the file body, so the literal is
-fine there. Relevant only to anyone replaying these REST calls by hand.
+**Harness note (not a product concern):** the literal `rmdir` inside `workspace-options`
+(a Perforce client option, `…nomodtime rmdir`) trips the agent sandbox's destructive-command
+guard *when a REST snippet containing it is run as an ad-hoc shell command*. Inside the
+committed `bootstrap-builds.ps1` run via `pwsh -File`, the guard scans the command line, not
+the file body, so the literal is fine there. Relevant only to anyone replaying these REST
+calls by hand.
 
-## 4. Verified create-body
+## 4. Verified create-bodies
 
-`POST /app/rest/vcs-roots` (auth: superuser-scrape, same as the rest of `bootstrap-builds.ps1`):
+**Project** — `POST /app/rest/projects`:
+
+```
+{ name: "AAA Sandbox", id: "AAASandbox", parentProject: { locator: "_Root" } }
+```
+
+**VCS root** — `POST /app/rest/vcs-roots` (the §3-proven body):
 
 ```
 id       = AAASandbox_GameMainStream
 name     = "Game Main Stream"
 vcsName  = perforce
-project  = { id: AAASandbox }          # project-scoped, NOT a global root
+project  = { id: AAASandbox }          # project-scoped — REQUIRES the project to exist first
 properties:
   port              = host.docker.internal:1667   # TeamCity polls through the broker
   user              = james
@@ -84,7 +102,7 @@ properties:
   workspace-options = <4-line block, each label PadRight(16) + value, LF-joined>
 ```
 
-`workspace-options` is reproduced exactly via per-line `.PadRight(16)`:
+`workspace-options`, reproduced exactly via per-line `.PadRight(16)`:
 
 ```
 Options:        noallwrite clobber nocompress unlocked nomodtime rmdir
@@ -96,86 +114,97 @@ LineEnd:        local
 (`"Options:".PadRight(16)` = 8 trailing spaces; `"Host:"` = 11; `"SubmitOptions:"` = 2;
 `"LineEnd:"` = 8 — every value column-aligns at 16, matching the captured char codes.)
 
-## 5. Design — `Ensure-VcsRootDefinition`
+## 5. Design — `Ensure-Project` + `Ensure-VcsRootDefinition`
 
-A new idempotent function added to **`bootstrap-builds.ps1`** (placement decision A:
-fold into the existing installer rather than a standalone script — bootstrap already
-owns the project, build configs, and root *attachment*, so it owning root *creation* is
-cohesive, and the reset collapses to two scripts).
+Two new idempotent functions in **`bootstrap-builds.ps1`** (placement decision A: fold into
+the existing installer — it already owns the build configs and the root *attachment*, so it
+owning the project + root *creation* is cohesive, and the reset collapses to two scripts).
 
-- **Ordering:** called once in the main body **before** the build-type loop, so the
-  subsequent `Add-VcsRoot` attaches a root that now exists. The project `AAASandbox` must
-  exist first (dependency — see §9).
-- **Idempotency:** `GET /app/rest/vcs-roots/id:AAASandbox_GameMainStream`; if present,
-  `[skip]` (matching the existing `[create]`/`[skip]` console style). Honors the existing
-  **`-Recreate`** switch: when set, `DELETE` the root then re-`POST` it.
-- **Body:** the §4 verified body. `workspace-options` built with `.PadRight(16)` per line.
-- **Failure:** `$ErrorActionPreference = "Stop"` (script-wide) — a failed create aborts
+**Strict ordering** in the main body, before the build-type loop:
+
+```
+Ensure-Project              # POST /app/rest/projects (skip-if-exists)
+Ensure-VcsRootDefinition    # POST /app/rest/vcs-roots, project-scoped (skip-if-exists)
+foreach config: New-BuildType + Add-VcsRoot + steps/deps   # existing loop, now attaches a root that exists
+```
+
+- **Idempotency:** each does `GET id:…`; if present, `[skip]` (matching the existing
+  `[create]`/`[skip]` console style).
+- **`-Recreate`:** honors the existing switch. Project/root deletes must be sequenced
+  correctly against the 4 build-type attachments — see §9 (verified in the plan, not assumed).
+- **Bodies:** the §4 bodies. `workspace-options` built with `.PadRight(16)` per line.
+- **Failure:** script-wide `$ErrorActionPreference = "Stop"` — a failed create aborts
   bootstrap rather than proceeding to a dangling attach.
 
 ### Contract change
 
-`bootstrap-builds.ps1`'s synopsis currently says configs are "attached to the **existing**
-Game Main Stream VCS root." After this change it *creates* the root, so the synopsis and
-the `ci/README.md` reset note are updated to match.
+`bootstrap-builds.ps1`'s synopsis currently says configs are created "under the **existing**
+AAASandbox project, attached to the **existing** Game Main Stream VCS root." After this change
+it *creates* both, so the synopsis and the `ci/README.md` reset note are updated to match.
 
 ## 6. Components & file layout
 
 ```
-ci/scripts/bootstrap-builds.ps1   # MODIFY  add Ensure-VcsRootDefinition + call before the build-type loop; update synopsis
-ci/README.md                      # MODIFY  fix "Wiring to Track 1" table (stream mode, not client mapping); update reset story to the true 2-script form
-ci/lessons-learned.md             # +#8     "attach ≠ create": the root-entry vs root-definition gap, and doc drift caught by a live round-trip probe
+ci/scripts/bootstrap-builds.ps1   # MODIFY  add Ensure-Project + Ensure-VcsRootDefinition, called (in that order) before the build-type loop; update synopsis
+ci/README.md                      # MODIFY  fix "Wiring to Track 1" table (stream mode, not client mapping); update reset story to the true 2-script form; state the 2 remaining one-time UI steps
+ci/lessons-learned.md             # +#8     "attach ≠ create": the project + root-entry vs root-definition gaps, and doc drift caught by a live round-trip probe
 docs/superpowers/specs/2026-06-04-vcs-root-creation-design.md   # NEW (this)
 docs/superpowers/plans/2026-06-04-vcs-root-creation.md          # NEW (next, via writing-plans)
 ```
 
-No new secrets, no new external state. Pure addition of one REST call + idempotency guard
-to an existing installer.
+No new secrets, no new external state. Pure addition of two REST calls + idempotency guards
+to an existing installer, reusing its `Invoke-TC` helper and superuser-scrape auth.
 
-## 7. Reset story — now genuinely hands-off
+## 7. Reset story — now hands-off after initial setup
+
+One-time, per fresh server (NOT scripted — out of scope, §8): walk the TeamCity first-run
+setup wizard, then authorize the agents (Agents → Unauthorized → Authorize).
+
+Per-reset (fully scripted):
 
 ```powershell
 docker compose -f ci\docker-compose.yml down -v
 docker compose -f ci\docker-compose.yml up -d        # wait for healthy + agents
-pwsh -File .\ci\scripts\bootstrap-builds.ps1          # NOW creates the root, then the chain
+pwsh -File .\ci\scripts\bootstrap-builds.ps1          # NOW creates project + root, then the chain
 pwsh -File .\ci\scripts\setup-vcs-trigger.ps1         # mint token + triggers
 pwsh -File .\ci\scripts\demo-vcs-trigger.ps1          # both policy cases PASS
 ```
 
-p4d + broker are native Windows processes → untouched by `down -v`. The only thing that
-was previously manual — recreating the VCS root in the UI — is now `bootstrap-builds.ps1`.
-
-**Honest remaining manual step:** TeamCity **agent authorization** (Agents → Unauthorized
-→ Authorize) may still be a UI action on a fresh DB. That is a separate concern from the
-VCS root and is **out of scope** here (§8); it is called out so the "hands-off" claim is
-not overstated.
+p4d + broker are native Windows processes → untouched by `down -v`. The two things
+previously manual *per reset* — creating the project and the VCS root in the UI — are now
+`bootstrap-builds.ps1`.
 
 ## 8. Out of scope (this lever)
 
-- **Reconciling drift on an existing root.** `Ensure-VcsRootDefinition` is skip-if-exists
-  by id; it does not diff-and-patch a root that exists with stale properties. `-Recreate`
-  is the escape hatch (delete + recreate). Documented, deliberate.
-- **Agent authorization automation** (see §7) — separate concern.
+- **First-run setup wizard** (admin account + maintenance token) — a one-time-per-server UI
+  flow, not per-reset; not scripted.
+- **Agent authorization** — UI action on a fresh DB; separate concern, stated in README so
+  "hands-off" is not overstated.
+- **Reconciling drift on an existing project/root.** Both `Ensure-*` are skip-if-exists by
+  id; they do not diff-and-patch an object that exists with stale properties. `-Recreate` is
+  the escape hatch. Deliberate.
 - **Credentials/tickets** — the sandbox root uses no password (ticket-auth/none); real-shop
   credential handling is not addressed.
 - Any change to the trigger, hook, or demo from the `2026-06-03` lever — this is additive.
 
-## 9. Assumptions / dependencies to verify during implementation
+## 9. Assumptions / dependencies to verify in the plan (pre-flight)
 
-- **Project `AAASandbox` exists before the root is created.** The root is project-scoped;
-  the `POST` fails if the project is absent. Confirm `bootstrap-builds.ps1` creates (or
-  assumes) the project ahead of the new call, and order `Ensure-VcsRootDefinition`
-  accordingly. (Pre-flight step in the plan.)
-- REST specifics hold as verified: `POST /app/rest/vcs-roots` body shape, `vcsName=perforce`,
-  the six property names. (Already confirmed live in §3 — the plan re-confirms on a fresh DB.)
-- `-Recreate` delete path: `DELETE /app/rest/vcs-roots/id:…` succeeds when the root has
-  attached entries / is referenced by build types, or those must be detached first. Verify
-  the delete-while-referenced behavior during implementation.
-- The superuser-scrape auth path is identical to the rest of `bootstrap-builds.ps1` (no new
-  auth surface).
+- **Project create-body** (§4) round-trip-probed before use (same technique as the root).
+- **Ordering** project → root → build-types holds; `New-BuildType` and the root POST both
+  fail fast if the project is absent (already `Stop`).
+- **`-Recreate` delete-while-referenced — UNVERIFIED, do not assume.** The live root has 4
+  attachments. It is not yet known whether `DELETE /app/rest/vcs-roots/id:…` cascades
+  (auto-detaches) or refuses with 409. The plan **verifies this non-destructively** (throwaway
+  root + throwaway build type + attach + delete + observe), then codes `-Recreate` to a clean
+  teardown order (build types → root → project) → rebuild (project → root → build types) based
+  on the result. The **fresh-DB reset path is create-only**, so this affects only re-runs
+  against a populated DB.
+- **`p4-exe=p4`** requires `p4` reachable by TeamCity — already satisfied (the live chain
+  syncs; lesson #2 put `p4` in the agent image). Noted, not a new dependency.
 
 ## 10. References
 
-- [TeamCity REST API — VCS Roots](https://www.jetbrains.com/help/teamcity/rest/manage-vcs-roots.html)
+- [TeamCity REST API — VCS Roots](https://www.jetbrains.com/help/teamcity/rest/manage-vcs-roots.html) ·
+  [Projects](https://www.jetbrains.com/help/teamcity/rest/manage-projects.html)
 - [Integrating TeamCity with Perforce](https://www.jetbrains.com/help/teamcity/integrating-teamcity-with-perforce.html)
 - Prior lever: `docs/superpowers/specs/2026-06-03-vcs-trigger-design.md` (§2 root shape, §7 reset story this corrects)
