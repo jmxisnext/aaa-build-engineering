@@ -24,6 +24,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '_unreal-common.ps1')
+
 $results = [System.Collections.Generic.List[object]]::new()
 function Add-Check([string]$name, [bool]$ok, [string]$detail) {
   $results.Add([pscustomobject]@{
@@ -56,20 +58,8 @@ if (Test-Path $vswhere) {
   Add-Check 'Visual Studio 2022 (C++ x64 toolset)' $false 'vswhere.exe not found'
 }
 
-# --- launcher manifest: canonical list of launcher-installed engines + projects ---
-$manifest = "$env:ProgramData\Epic\UnrealEngineLauncher\LauncherInstalled.dat"
-$launcherItems = @()
-if (Test-Path $manifest) {
-  try { $launcherItems = (Get-Content $manifest -Raw | ConvertFrom-Json).InstallationList } catch { }
-}
-
 # --- 2. Unreal Engine 5.x ---
-$engineRoot = $EnginePath
-if (-not $engineRoot) {
-  $eng = $launcherItems | Where-Object { $_.AppName -like 'UE_5.*' } |
-         Sort-Object AppName -Descending | Select-Object -First 1
-  if ($eng) { $engineRoot = $eng.InstallLocation }
-}
+$engineRoot = Find-UnrealEngine -EnginePath $EnginePath
 $runUat = if ($engineRoot) { Join-Path $engineRoot 'Engine\Build\BatchFiles\RunUAT.bat' } else { $null }
 if ($runUat -and (Test-Path $runUat)) {
   $ver = '?'
@@ -87,33 +77,7 @@ if ($runUat -and (Test-Path $runUat)) {
 }
 
 # --- 3. Lyra project ---
-$lyra = $LyraUproject
-if (-not $lyra) {
-  # (a) launcher manifest (rarely lists created sample projects, but cheap to try)
-  $cand = $launcherItems |
-          Where-Object { $_.AppName -like '*Lyra*' -or $_.InstallLocation -like '*Lyra*' } |
-          Select-Object -First 1
-  if ($cand) {
-    $u = Get-ChildItem -Path $cand.InstallLocation -Filter '*.uproject' -Recurse -ErrorAction SilentlyContinue |
-         Select-Object -First 1
-    if ($u) { $lyra = $u.FullName }
-  }
-}
-if (-not $lyra) {
-  # (b) scan the usual project roots - 'Create Project' sample projects are NOT
-  #     in the launcher manifest. Specific roots first (fast), bare drives last.
-  $roots = @(
-    'G:\UnrealProjects', 'G:\Unreal Projects',
-    (Join-Path $env:USERPROFILE 'Documents\Unreal Projects'),
-    'D:\UnrealProjects', 'G:\', 'D:\'
-  ) | Where-Object { Test-Path $_ }
-  foreach ($root in $roots) {
-    # the sample folder is 'LyraStarterGame' but the project file is 'Lyra.uproject'
-    $u = Get-ChildItem -Path $root -Filter 'Lyra*.uproject' -Recurse -Depth 3 -ErrorAction SilentlyContinue |
-         Select-Object -First 1
-    if ($u) { $lyra = $u.FullName; break }
-  }
-}
+$lyra = Find-LyraUproject -Uproject $LyraUproject
 if ($lyra -and (Test-Path $lyra)) {
   Add-Check 'Lyra project' $true $lyra
 } else {
