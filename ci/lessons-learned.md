@@ -445,4 +445,55 @@ VCS root explicitly instead; and know that token minting is self-service-only ev
 for admins, so provision a service account's token by briefly authenticating as it,
 not as the superuser."*
 
+## 8. "Attach ≠ create": the bootstrap that assumed two objects into existence
+
+**What happened:** `bootstrap-builds.ps1` built the whole chain and looked fully
+idempotent — re-running it was a clean string of `[skip]`s. But it had never been
+run against a *wiped* server. It turned out to **create neither** of the two objects
+the chain hangs off: the `AAASandbox` **project** and the `AAASandbox_GameMainStream`
+**VCS root**. It referenced both (`project={id:…}` on every build type; a
+`vcs-root-entries` *attachment* to the root) but created only the build types. Both
+the project and the root had been made by hand in the UI months earlier and silently
+survived every restart — so the "instant CI restored in two commands" reset story
+was never actually exercised and would have died at the first POST with "project not
+found."
+
+**Root cause:** the REST API has two different calls that read almost identically in
+a script. `POST /app/rest/buildTypes/id:<bt>/vcs-root-entries` **attaches** an existing
+root to a build type; `POST /app/rest/vcs-roots` **creates the root definition**. The
+bootstrap did the former and never the latter — and nothing created the project at all.
+Idempotent-on-a-populated-DB hid it completely: skip-if-exists looks the same whether
+you created the thing or merely inherited it from a manual setup.
+
+**Fixes:**
+1. Added `Ensure-Project` (`POST /app/rest/projects`) and `Ensure-VcsRootDefinition`
+   (`POST /app/rest/vcs-roots`), idempotent, called in dependency order
+   (project → root → build-type loop) so the chain rebuilds from an empty database.
+2. **Verified the exact create-body live, with zero assumptions.** A non-destructive
+   round-trip probe — POST a throwaway `…_probe` root with the candidate body, GET it
+   back, diff against the live root, delete the probe — proved a from-scratch root
+   matches the hand-made one byte-for-byte across all six properties. This also caught
+   **documentation drift**: the README documented the root as a *client mapping*, but
+   the live root is *stream mode* (`use-client=stream`, `stream=//game/main`). The
+   `workspace-options` block is space-aligned to column 16, not tab-separated — found
+   by dumping char codes, not by eyeballing.
+3. `-Recreate` tears down in reverse-dependency order (build types → root) so the root
+   is never deleted while referenced — no reliance on TeamCity's cascade-on-delete.
+
+**Why a build engineer cares:** "idempotent" and "reproducible from scratch" are not
+the same property, and a re-run against a populated environment proves only the first.
+The only honest test of a bootstrap is to run it against the wiped state it claims to
+recover — anything else lets a manual, undocumented dependency masquerade as automation.
+And when you *do* script a config object, read the live one back and diff it; the
+shape that's actually stored beats the shape the docs (or your memory) claim.
+
+**Interview-ready bullet:** *"Our CI bootstrap looked idempotent but had never been run
+against an empty database — it attached a VCS root and referenced a project that nothing
+created; both had been made by hand in the UI and just survived restarts. I scripted the
+project and root creation, and verified the exact REST body with a non-destructive
+round-trip probe — create a throwaway, read it back, diff against the real one, delete it.
+That caught two things memory would've missed: the root was stream-mode, not the client
+mapping our docs claimed, and its workspace options were space-aligned, not tabbed. The
+lesson: idempotent ≠ reproducible; only a from-scratch run proves the latter."*
+
 
