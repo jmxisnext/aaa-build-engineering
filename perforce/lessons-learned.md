@@ -118,6 +118,24 @@ Two gotchas:
 
 **Interview-ready bullet:** *"A broker freeze that blocks everyone forces people to bypass the broker, which destroys your audit trail. The fix is an ordered allowlist — service-account `pass` rule before the blanket `reject`, anchored user regex — so automation keeps moving AND every submit decision still lands in the broker log."*
 
+## 12. `change-submit` vs `change-content` — register at the phase that has your data
+
+**What happened:** Building `validate-submit.py` (a depot-hygiene trigger that rejects compiled build output *and* oversized files), the size rule needs each file's byte count. Wired naively as a `change-submit` trigger, the forbidden-extension half worked but the size half always no-op'd — `p4 fstat` came back with no `fileSize` because the file content wasn't on the server yet.
+
+**Root cause:** A submit fires three trigger phases in order — **`change-submit`** (after submit starts, *before* file transfer: metadata + file list only), **`change-content`** (after transfer, *before* commit: content is on the server, addressable via the `@=<change>` revision specifier), **`change-commit`** (after the commit is durable: too late to reject). A check that needs only the file *list* — forbidden extensions, or the existing `require-engine-tag` description check — can run at `change-submit`. A check that needs the *bytes/size* must run at `change-content`.
+
+**Fix:** Register `validate-submit` as **`change-content`** and read sizes with `p4 fstat -Ol //path@=<change>` — the `@=change` spec resolves to the in-flight content of the pending change. One trigger then authoritatively enforces both rules. Proven by `triggers/demo-validate-submit.ps1` (5/5 cases: build-artifact reject, clean accept, oversized reject *via @=change*, `[large-ok]` override accept, `//thirdparty/` exemption accept).
+
+**Why a build engineer cares:** Getting this wrong yields a trigger that *passes a quick test* (the extension half fires) but silently lets multi-GB blobs through (the size half ran too early to see them) — the classic "green in the demo, broken in prod" trap. Rule of thumb: register at the **earliest** phase where all the data your check needs already exists, and no earlier. And the size rule is preventive for a reason: an oversized file is effectively permanent here because `p4 obliterate` is **broker-blocked** (`broker/p4broker.conf`) — cheaper to stop the blob at submit than to file a ticket to rewrite history.
+
+## 13. p4p / p4d / p4broker are not in the P4V bundle — separate filehost binaries
+
+**What happened:** The roadmap said "proxy/broker"; only the broker existed. Standing up the proxy needs `p4p.exe`, which — unlike `p4`, `P4V`, `P4Admin`, `P4Merge` — is **not** part of `winget install Perforce.P4V`. Like `p4d.exe` and `p4broker.exe` it's a standalone download from the Perforce filehost, version-matched to the server (`r25.2/bin.ntx64/p4p.exe`).
+
+**Second-order lesson (tooling / security):** an agent-initiated download of an executable from an external URL is — correctly — a **gated action**; the harness blocked the auto-download. The right response is not to route around the gate but to build the *entire* harness (`start-p4p.ps1`, `stop-p4p.ps1`, `demo-proxy.ps1`, `proxy/README.md`) so the human-approved binary fetch is the **single** remaining step, documented with the exact command. See `proxy/README.md`.
+
+**Why a build engineer cares:** Knowing which Helix components ship in which package is provisioning-101 — you do **not** get `p4d`/`p4broker`/`p4p` from the visual-client installer, so a "just install P4V" runbook leaves you without a server, broker, or proxy. And "build everything around the one privileged step" is exactly how you keep provisioning/CI automation reviewable instead of smuggling credentialed or binary-fetching steps into the middle of a script.
+
 ---
 
 ## TL;DR — interview-ready bullets
@@ -136,3 +154,5 @@ These are the kinds of one-liners a build engineer interviewee should be able to
 - "Broker `redirection = selective` (default) prevents replication-lag bugs in GUIs by sticking a session to master once a write touches it; `pedantic` always reroutes per-command rule. Production usually wants selective for interactive sessions and pedantic for scripted workloads against replicas."
 - "Proxy = file-content cache; broker = command-level policy; replica = read-mostly mirror; edge server = local-write replica that forwards submits. Real studios run all four."
 - "A broker freeze that blocks everyone forces an audit-destroying bypass. Reconcile 'freeze' with 'CI must keep submitting' via an *ordered* service-account allowlist — a `pass` rule (anchored user regex) before the blanket `reject` — so allowed submits stay in `broker.log`."
+- "Submit triggers fire change-submit → change-content → change-commit. Filename/description rules can run at change-submit; size/content rules MUST run at change-content, reading bytes via the `@=<change>` revision spec. Register at the earliest phase that already has your data."
+- "p4p (proxy), p4d (server), and p4broker are NOT in the P4V client bundle — they're separate version-matched filehost binaries. Provisioning a server or remote office means fetching those, not running the GUI installer."

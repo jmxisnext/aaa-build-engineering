@@ -41,6 +41,39 @@ A studio rarely puts everything in `//depot/`. We carve out depots so we can app
    └── //game/release-1-1  type=release    # locked, fix-only
 ```
 
+### Live snapshot (`p4 streams` / `p4 depots`, captured 2026-06-04)
+
+The ASCII graph above is the *design intent* — it deliberately shows `feature-rebound` and
+`release-1-1` as illustrative future branches. Below is the depot as it **actually exists** in the
+sandbox today: the ground-truth output a build engineer pastes into a runbook so the doc can be
+diffed against reality instead of trusted on faith (see auto-memory `verify-over-assume-on-portfolio`).
+
+```text
+$ p4 streams
+Stream //game/dev               development //game/main 'dev'
+Stream //game/feature-shotmeter development //game/dev  'feature-shotmeter'
+Stream //game/main              mainline    none         'main'
+Stream //game/release-1-0       release     //game/main  'release-1-0'
+```
+
+Read the third column as the parent link: `main` (mainline, no parent) ← `dev` ← `feature-shotmeter`;
+`release-1-0` branches off `main`. Only the streams that were actually cut exist — `feature-rebound`
+and `release-1-1` from the sketch above were never created, and a live snapshot surfaces that gap at a
+glance. That is the whole point of checking the doc against `p4` output rather than the diagram.
+
+```text
+$ p4 depots
+Depot build       2026/05/15 local     build/...       'CI configs, BuildGraph, release manifests'
+Depot depot       2026/05/15 local     depot/...       'Default depot'
+Depot engine      2026/05/15 local     engine/...      'Engine source (proprietary)'
+Depot game        2026/05/15 stream  1 game/...        'Game project — streams'
+Depot thirdparty  2026/05/15 local     thirdparty/...  'Vendor source + prebuilt SDKs'
+Depot tools       2026/05/15 local     tools/...       'Pipeline tools (Python, C# WPF)'
+```
+
+`game` is the only `stream`-type depot (StreamDepth `1`); the rest are classic `local` depots. The
+`//spec/` depot proposed above is still deferred (see the deferred-decisions table at the end).
+
 **Stream-naming gotcha — `StreamDepth` is fixed per depot.** When you create a stream depot you commit to one depth (we picked `StreamDepth: //game/1` — single segment after `//game/`). That means every stream name must be exactly *one* segment, so `//game/release/1.0` is not legal in this depot — it would be two segments. Real shops handle this in one of two ways:
 
 | Approach | Examples | Trade-off |
@@ -137,7 +170,7 @@ The `+l` (lockfile) attribute is **critical** for binary art assets: it forces e
 | Question | Note |
 |---|---|
 | Archive depot for thirdparty? | Yes eventually — `//thirdparty/` will move to `type=archive` once it has size pressure. |
-| Proxy / broker placement? | One proxy per remote office. For sandbox, we'll stand up a second p4 process on `:1667` to simulate. |
+| Proxy / broker placement? | **Done.** Broker on `:1667` (`broker/`, policy layer) + proxy on `:1668` (`proxy/`, content cache) both stand up in the sandbox alongside p4d on `:1666`. One proxy per remote office in production. |
 | Spec depot path? | `//spec/` is auto-created; just need to enable it in `p4 depots`. |
 | Per-stream change-review workflow? | Skipping for now. In real shops use Swarm or Helix Swarm. |
 

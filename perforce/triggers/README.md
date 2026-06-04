@@ -7,8 +7,10 @@ Server-side hooks that gate or react to Perforce operations. Triggers are how a 
 | File | Type | What it does |
 |---|---|---|
 | `require-engine-tag.py` | `change-submit` | Rejects submits that touch `//engine/...` unless the description contains `[engine]` somewhere |
+| `validate-submit.py` | `change-content` | Depot hygiene on `//...`: rejects compiled build output (`.obj/.pdb/.lib/.exe/...`, except `//thirdparty/`) and oversized files (>50 MB) without a `[large-ok]` override |
 | `notify-teamcity.ps1` | `change-commit` | On every commit under `//game/main/...`, asks TeamCity to check the VCS root *now* — firing the build chain near-instantly instead of waiting for the next poll |
 | `deploy.ps1` | helper | Copies the trigger scripts in this dir (`*.py` + `notify-teamcity.ps1`) to `C:\PerforceSandbox\triggers\` (where p4d reads them from) |
+| `demo-validate-submit.ps1` | demo | Self-contained end-to-end proof of `validate-submit.py` — 5 asserted cases, throwaway clients, full cleanup |
 
 ## Why a separate deploy step
 
@@ -81,6 +83,51 @@ p4 submit -d "tweak README"
 ```
 
 All three were exercised end-to-end on changes 19 and 20 in this sandbox.
+
+## Depot-hygiene validation (`validate-submit.py`)
+
+A second policy trigger, distinct from the engine-tag one in both *what* it
+checks and *which phase* it runs at. It gates two things across the whole depot:
+
+1. **No compiled build output** — `.obj .pdb .lib .exe .dll .ilk .pch ...`. These
+   are produced by the build and must be rebuilt from source in CI, never
+   versioned. **Exempt: `//thirdparty/`**, whose entire purpose is checked-in
+   *prebuilt* vendor SDKs (matches the depot split in `../depot-layout.md`).
+2. **No oversized files** (>50 MB, env-overridable via `P4_MAX_FILE_MB`) unless
+   the description carries `[large-ok]`. Guards against the accidental giant blob
+   that bloats the depot permanently — "permanently" because `p4 obliterate`, the
+   only clean removal, is **broker-blocked** (`../broker/p4broker.conf`).
+
+**Why it's `change-content`, not `change-submit`** (the load-bearing detail):
+the extension check needs only the file *list* (available at `change-submit`),
+but the size check needs the file *content/size*, which is only on the server at
+`change-content` (read via the `@=<change>` revision spec). Registering at the
+later phase lets one trigger own both rules. Pick the **earliest** phase that has
+all the data your check needs — no earlier. (See `../lessons-learned.md` #12.)
+
+Registered as:
+
+```
+validate-submit change-content //... "C:\Python313\python.exe C:\PerforceSandbox\triggers\validate-submit.py %change%"
+```
+
+### Demo
+
+`demo-validate-submit.ps1` proves it end-to-end and self-cleans (throwaway
+clients, obliterates its own committed test files, restores the size threshold):
+
+```powershell
+.\demo-validate-submit.ps1
+#   PASS  A  .obj in //game/dev rejected
+#   PASS  B  clean .cpp accepted
+#   PASS  C  oversized rejected (via @=change)
+#   PASS  D  oversized + [large-ok] accepted
+#   PASS  E  .dll under //thirdparty/ accepted
+#   RESULT: 5 passed, 0 failed
+```
+
+It restarts p4d with a low `P4_MAX_FILE_MB` so the size cases use ~6 MB files
+instead of churning 50 MB through the sandbox, then restores the default on exit.
 
 ## Lessons banked while building this trigger
 
