@@ -18,6 +18,8 @@ That's how studios actually wire CI: through the policy layer, not around it.
 | `data/` | Server DB, agent conf, logs — all gitignored, all regenerable |
 | `scripts/bootstrap-builds.ps1` | Idempotent REST bootstrap of the 4-config build chain |
 | `scripts/bench-agents.ps1` | Measure chain wall-clock with 1 vs 2 agents (parallelism demo) |
+| `scripts/setup-vcs-trigger.ps1` | Idempotent installer: durable token + VCS trigger + p4d change-commit trigger (instant CI) |
+| `scripts/demo-vcs-trigger.ps1` | Policy-gated end-to-end proof: allowlisted submit fires the chain, frozen-out submit doesn't |
 | `lessons-learned.md` | Track 2 incident log (same pattern as `perforce/lessons-learned.md`) |
 
 ## Bring up / tear down
@@ -114,6 +116,44 @@ that overhead is *exactly* what a second agent overlaps, and it only grows
 on a real depot. And a *third* agent would buy nothing here: the DAG is only
 2-wide at its widest stage. See `lessons-learned.md` §5.
 
+## Instant CI: VCS trigger (P4 submit → auto-build)
+
+A submit to `//game/main` that passes broker policy auto-fires the whole chain —
+no human in the loop. A p4d `change-commit` trigger pings TeamCity the instant a
+changelist lands; TeamCity's VCS trigger on Package then fans out
+Compile → SmokeTest‖CookData → Package. The broker gates it *upstream*: a submit
+the freeze policy rejects never becomes a changelist, so CI never runs on it.
+
+**Install (idempotent; re-run after `docker compose down -v`):**
+
+```powershell
+pwsh -File .\scripts\setup-vcs-trigger.ps1
+```
+
+This deploys the hook (`perforce/triggers/notify-teamcity.ps1` → `C:\PerforceSandbox\triggers\`),
+mints a durable least-privilege token for the `ci-hook` user (stored outside the
+repo), adds the VCS trigger to Package, and installs the p4d `change-commit`
+trigger. See `lessons-learned.md` #7 for the durable-token, endpoint-topology, and
+self-service-token gotchas.
+
+**Demo / self-test (proves both policy halves; exits non-zero on failure):**
+
+```powershell
+pwsh -File .\scripts\demo-vcs-trigger.ps1
+```
+
+- **Case A:** an allowlisted `build-svc` submit through the broker `:1667` fires
+  the chain within ~90s, green.
+- **Case B:** a frozen-out `james` submit through `:1667` is rejected by the broker —
+  no changelist lands, no build fires.
+
+That A/B is the Track 1 ↔ Track 2 tie made concrete: **CI runs exactly on the
+submits that pass studio policy.** The hook is fail-safe — `change-commit` fires
+after the commit is durable and the script always exits 0, so a hook hiccup can
+never block a submit (it just falls back to TeamCity's next scheduled poll).
+Loop-safety: the chain emits artifacts, it never submits back to `//game/main` —
+see `perforce/triggers/README.md`.
+
 ## What this stack does not do yet
 
 - No external DB (HSQLDB only — sandbox-tier).
@@ -121,7 +161,9 @@ on a real depot. And a *third* agent would buy nothing here: the DAG is only
   will need a separate native Windows agent registered against the same
   server (deferred — the current chain builds the C++ seed with gcc/CMake on
   Linux).
-- Builds are manual / dependency-triggered only — no VCS-change trigger wired
-  yet, so a P4 submit through the broker does not auto-fire the chain.
+- Post-commit CI only — a submit fires the chain *after* it lands. The next lever
+  is **pre-flight / gated builds** (TeamCity's Perforce Shelve Trigger → personal
+  builds on shelved changelists) so broken changes are caught *before* they hit
+  mainline. Parked in `SEEDS.md`.
 - No HTTPS / reverse proxy. Production would front this with nginx + a real
   cert.

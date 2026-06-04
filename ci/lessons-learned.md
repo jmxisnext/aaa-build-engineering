@@ -375,4 +375,74 @@ waiting for readiness: failed logins hit the brute-force limiter, and the
 resulting lockout rejects even a correct token, so your readiness probe
 manufactures the failure it's checking for. Back off on auth failure."*
 
+## 7. Instant CI from Perforce: a durable token, a topology-proof endpoint, and the self-service-token trap
+
+**What happened:** Wired the VCS trigger so a P4 submit auto-fires the chain — a
+p4d `change-commit` trigger that pings TeamCity to check the VCS root, which then
+fires the build via a VCS trigger on Package. Three separate things bit, all in
+the auth/topology seam:
+
+1. **The first hook authenticated with the scraped superuser token** — which
+   rotates every server restart (see #6). It worked once, then every commit after
+   the next restart silently failed auth. The hook exits 0 by design (it must never
+   block a submit), so the failure was invisible until you read `hook.log`.
+
+2. **JetBrains' dedicated Perforce post-commit script auto-detects VCS roots by
+   matching `p4port` — and that match never lands here.** The script POSTs
+   `/app/perforce/commitHook` with the server's port; TeamCity selects the roots
+   whose `port:` equals it. But the hook runs on the p4d host where the port reads
+   `localhost:1666`, while TeamCity knows the same root as
+   `host.docker.internal:1667` (it polls *through the broker, from inside a
+   container*). The strings differ, so auto-detect matched zero roots and notified
+   nothing — silently.
+
+3. **Minting the durable token failed with 403 — token creation is
+   self-service-only.** `POST /app/rest/users/username:ci-hook/tokens/<name>` as the
+   **superuser** returns *"You do not have enough permissions to create tokens for
+   this user."* on TeamCity 2026.1. Even a system admin cannot mint a token *for
+   another user*; only the owning identity can.
+
+**Root causes:** (1) is a credential-lifetime mismatch — a per-process secret
+powering a persistent trigger. (2) is a topology mismatch — the vendor convenience
+assumes the hook and the server agree on the Perforce port string, which is false
+the moment a broker and a container boundary sit between them. (3) is an
+ownership/least-privilege control: tokens are bearer credentials, so TeamCity
+restricts minting to the identity that will bear them — admins get no shortcut.
+
+**Fixes:**
+
+1. Mint a **durable access token** for a dedicated least-privilege `ci-hook` user
+   (Project Developer / *Run build*) and store it outside the repo at
+   `C:\PerforceSandbox\triggers\teamcity-hook.token`; the hook reads that, not the
+   superuser token.
+2. Drop auto-detect; POST the **generic**
+   `commitHookNotification?locator=vcsRoot:(id:AAASandbox_GameMainStream)` — naming
+   the root explicitly sidesteps the port-string match entirely.
+3. Work *with* the self-service rule, not around it: set a **random bootstrap
+   password** on `ci-hook` (as superuser), authenticate **as** `ci-hook` to mint its
+   own token, then clear the password in a `finally`. The password is random and
+   in-memory only; `ci-hook` ends up bearer-token-only. `setup-vcs-trigger.ps1` does
+   this idempotently.
+
+**Why a build engineer cares:** all three are the same shape — *"works in the demo,
+fails on the automated / long-lived path."* (a) A trigger is infrastructure;
+authenticate it with a secret that rotates and you've scheduled a future silent
+outage. (b) Vendor "it just auto-detects" conveniences encode an assumption about
+your network; the moment you add a broker, a proxy, or a container boundary — i.e.
+any real studio topology — the matching key stops matching and it fails *quietly*,
+the worst way to fail. (c) Credential-minting being self-service is a deliberate
+security control; automation that provisions tokens must plan for it
+(bootstrap-password, or mint out-of-band and inject), not assume admin can do
+everything.
+
+**Interview-ready bullet:** *"To get instant CI from Perforce I used a p4d
+change-commit trigger that pings TeamCity's commit-hook endpoint. Three gotchas,
+all in the auth/topology seam: authenticate the hook with a durable minted token,
+never the superuser token that rotates each restart; skip the vendor's auto-detect
+endpoint that matches on p4port, because once a broker and a container sit between
+p4d and TeamCity the port strings differ and it silently matches nothing — name the
+VCS root explicitly instead; and know that token minting is self-service-only even
+for admins, so provision a service account's token by briefly authenticating as it,
+not as the superuser."*
+
 
