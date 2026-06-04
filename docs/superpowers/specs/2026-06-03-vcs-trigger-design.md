@@ -150,7 +150,7 @@ Idempotent, re-runnable actions:
    run as super `james`), referencing the **deployed** script path, skip-if-present:
 
    ```
-   check-for-changes-teamcity change-commit //game/main/... "pwsh -NoProfile -File C:\PerforceSandbox\triggers\notify-teamcity.ps1 %change%"
+   check-for-changes-teamcity change-commit //game/main/... "pwsh -NoProfile -File C:\PerforceSandbox\triggers\notify-teamcity.ps1 -Change %change%"
    ```
 
 ### 5.2 `notify-teamcity.ps1`

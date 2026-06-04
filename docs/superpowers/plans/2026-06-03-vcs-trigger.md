@@ -306,7 +306,7 @@ function Ensure-P4Trigger {
         Write-Host "[skip]   p4d change-commit trigger present" -ForegroundColor DarkGray
         return
     }
-    $line = "`tcheck-for-changes-teamcity change-commit //game/main/... `"pwsh -NoProfile -File $NotifyScript %change%`""
+    $line = "`tcheck-for-changes-teamcity change-commit //game/main/... `"pwsh -NoProfile -File $NotifyScript -Change %change%`""
     if ($current -notmatch '(?m)^Triggers:') { $current += "`nTriggers:" }
     $spec = $current + "`n" + $line + "`n"
     $spec | & p4 -p $P4Port -u $P4User triggers -i | Out-Null

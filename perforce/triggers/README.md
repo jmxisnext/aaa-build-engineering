@@ -39,7 +39,7 @@ Verify with `p4 triggers -o`.
 The `change-commit` hook below is registered for you by `ci/scripts/setup-vcs-trigger.ps1`, which deploys the script and appends a line like:
 
 ```
-check-for-changes-teamcity change-commit //game/main/... "pwsh -NoProfile -File C:\PerforceSandbox\triggers\notify-teamcity.ps1 %change%"
+check-for-changes-teamcity change-commit //game/main/... "pwsh -NoProfile -File C:\PerforceSandbox\triggers\notify-teamcity.ps1 -Change %change%"
 ```
 
 ## Instant-CI hook (`notify-teamcity.ps1`)

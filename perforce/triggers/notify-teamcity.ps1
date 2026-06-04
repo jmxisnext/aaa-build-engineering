@@ -33,10 +33,16 @@ function Write-HookLog([string]$Msg) {
 }
 
 try {
+    # Guard the inputs up front. p4d passes %change% positionally; an empty
+    # $Change (e.g. a future param added ahead of it) or $VcsRootId would
+    # otherwise build a bad URL and fail silently in the catch below.
+    if (-not $Change)    { Write-HookLog "NO CHANGE ARG"; exit 0 }
+    if (-not $VcsRootId) { Write-HookLog "NO VCSROOTID";  exit 0 }
     Start-Sleep -Seconds 10                          # let p4d finish processing the change
     if (-not (Test-Path $TokenFile)) { Write-HookLog "NO TOKEN FILE at $TokenFile"; exit 0 }
     $token = (Get-Content -Raw $TokenFile).Trim()
     $uri = "$BaseUrl/app/rest/vcs-root-instances/commitHookNotification?locator=vcsRoot:(id:$VcsRootId)"
+    # Invoke-WebRequest (not Invoke-RestMethod) so we can log the StatusCode.
     $resp = Invoke-WebRequest -Method POST -Uri $uri `
         -Headers @{ Authorization = "Bearer $token" } -UseBasicParsing -TimeoutSec 30
     Write-HookLog "POST commitHook -> HTTP $($resp.StatusCode)"
