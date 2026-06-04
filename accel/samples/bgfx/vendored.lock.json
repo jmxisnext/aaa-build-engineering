@@ -1,0 +1,21 @@
+{
+  "note": "Vendored bgfx workload for accel Track 3. Re-create with setup-bgfx.ps1. Sources gitignored.",
+  "clonedUtc": "2026-06-04T17:26:51Z",
+  "repos": {
+    "bx": {
+      "url": "https://github.com/bkaradzic/bx.git",
+      "ref": "d4096a84464605e8fb11e5ffa2d851e42eecffb3",
+      "sha": "d4096a84464605e8fb11e5ffa2d851e42eecffb3"
+    },
+    "bimg": {
+      "url": "https://github.com/bkaradzic/bimg.git",
+      "ref": "446b9eb11130821fd11607c2fc94aee80976e56a",
+      "sha": "446b9eb11130821fd11607c2fc94aee80976e56a"
+    },
+    "bgfx": {
+      "url": "https://github.com/bkaradzic/bgfx.git",
+      "ref": "0e734522cd8fafa29c8035cbde671ecec62668a3",
+      "sha": "0e734522cd8fafa29c8035cbde671ecec62668a3"
+    }
+  }
+}

@@ -24,11 +24,15 @@ acceleration wins on top.
 | `scripts/bench.ps1` | Build-acceleration benchmark: compiles N heavy TUs serial / `/MP` / unity / chunked-unity / PCH and prints one before/after table. The reusable harness the Track 3 levers plug into. |
 | `scripts/demo-fbuild.ps1` | FASTBuild lever: builds the same TUs through FASTBuild and measures its cache (clean cache-miss vs cache-HIT vs no-op). |
 | `scripts/bench-link.ps1` | **Linker** lever: the `bench.ps1` sibling for the *link* step. Compiles a 16k-symbol fixture once, then times only the link — `/INCREMENTAL` vs full, `/OPT:REF`/`ICF`, `/LTCG`, a symbol-bloat sweep, and a `link /time+` breakdown. |
+| `scripts/setup-bgfx.ps1` | Vendors the **real workload** — shallow-clones bgfx/bx/bimg into `extern/` (gitignored), pinned to the last revision that builds with the installed MSVC 19.29. SHAs recorded in `samples/bgfx/vendored.lock.json`. |
+| `scripts/bench-bgfx.ps1` | The levers on a **real codebase** (bgfx renderer core): serial / `/MP` / unity (bgfx's own `amalgamated.cpp`) + single-file-edit incremental + a `/d2cgsummary`+`/Bt+` profile. The honest before/after the synthetic fixture can't give. |
 | `samples/hello/` | Smallest program that proves compile + run (prints `_MSC_VER`). |
 | `samples/bench/` | `heavy.h` compile-cost fixture + the `/MP`/unity/PCH results writeup (`README.md`). |
 | `samples/fbuild/` | `fbuild.bff` + the FASTBuild cache results writeup (`README.md`). |
 | `samples/link/` | symbol-bloat fixture (generated) + the linker-profiling results writeup (`README.md`). |
+| `samples/bgfx/` | **Real-workload** writeup (`README.md`): bgfx before/after, the pin rationale, and how real code moved the lever ranking. `vendored.lock.json` pins the SHAs. |
 | `tools/fastbuild/` | Where `FBuild.exe` goes (gitignored vendor binary; `README.md` has the download steps). |
+| `extern/` | Vendored bgfx/bx/bimg source (gitignored; re-clone via `setup-bgfx.ps1`). |
 | `lessons-learned.md` | Gotchas, same numbered format as `perforce/` and `ci/`. |
 
 ## The compiler situation (resolved 2026-06-03)
@@ -108,3 +112,10 @@ same shape as `ci/lessons-learned.md` #2 (agent had no `p4` binary):
       `link /time+`. See `samples/link/` + lessons-learned #6.
 - [x] **One-page report** — [`REPORT.md`](REPORT.md): the lever table, decision
       framework, and hypotheses (incl. the refuted PCH prediction).
+- [x] **Real-workload validation** — re-ran the compile levers on the **bgfx
+      renderer core** (a shipping engine, not a fixture), using bgfx's own
+      amalgamation as the unity build. Real code flipped the ranking (`/MP`
+      **4.64×** > unity **3.86×**), measured unity's incremental cost (**15×** on
+      a trivial edit), and showed bgfx is front-end-bound (`/Bt+` 61 % front
+      end; `/d2cgsummary` 0 hot functions). See [`samples/bgfx/`](samples/bgfx/).
+      Pinned to a VS2019-buildable revision — `setup-bgfx.ps1`.

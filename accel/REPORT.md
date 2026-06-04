@@ -123,15 +123,46 @@ layered across both phases, not one switch.
   and rules out `/OPT:REF`/`/OPT:ICF`/`/LTCG` — a debug-iteration lever, not
   release. **`/LTCG`** is the inverse trade: link time for runtime perf.
 
+## Validation on a real codebase (bgfx renderer core)
+
+The sections above use a **synthetic** fixture — a header engineered to be
+expensive. To check the thesis against real code, I re-ran the compile levers on
+the **bgfx renderer core** (`extern/bgfx/src`, 20 TUs of a shipping engine) —
+and bgfx ships its *own* unity build (`amalgamated.cpp`), so unity here is real,
+not concatenated. Best of 3 cold, `/c` (`samples/bgfx/` + `bench-bgfx.ps1`):
+
+| config | best(s) | vs serial |
+|---|---|---|
+| serial (per-file) | 7.57 | 1.00× |
+| **`/MP` (per-file)** | **1.63** | **4.64×** |
+| unity (amalgamated) | 1.96 | 3.86× |
+
+**Real code moved the ranking — exactly as the thesis predicts.** On the
+fixture, unity (28×) crushed `/MP` (4×); on bgfx, **`/MP` (4.64×) *beats* unity
+(3.86×).** The fixture was one shared header parsed 32×, so amalgamating did it
+once; bgfx's 20 TUs are genuinely distinct renderers (VK/GL/D3D11/D3D12) with
+little shared work to collapse, so parallelizing wins. Two more real-code
+findings the fixture couldn't show:
+
+- **Unity's incremental cost, measured:** edit one trivial file → per-file
+  rebuilds **0.13 s**, the amalgamation rebuilds the whole engine, **1.96 s
+  (15×)**. That's the granularity unity trades for clean-build speed — the real
+  edit-build loop, the thing `/MP`/PCH keep and unity doesn't.
+- **bgfx is front-end-bound:** `/d2cgsummary` finds **0** hot codegen functions;
+  `/Bt+` shows **61 %** of `bgfx.cpp` is front-end (parse + instantiate
+  Vulkan/D3D/Windows decls). So the parse-once levers (the amalgamation, a
+  declaration-heavy PCH) fit — *not* `/LTCG`-class codegen tuning. Profile first.
+
 ## Honest caveat on these numbers
 
-This fixture is *instantiation/codegen-dominated by design* (one heavy template
-header, trivial bodies), which flatters unity and starves PCH. A
-declaration-heavy, unique-code codebase would shift the ranking toward PCH and
-chunked-unity+`/MP`. The link section is the mirror caveat — its fixture is
-*symbol-count-dominated by design* (16k trivial functions), so it shows
-`/INCREMENTAL`/`/LTCG`/`/OPT` cleanly but starves `/DEBUG:FASTLINK` (trivial
-debug info). **That's the whole point of the thesis: measure your own split
-before choosing.** Full per-lever detail: `samples/bench/README.md`,
+The synthetic fixture is *instantiation/codegen-dominated by design* (one heavy
+template header, trivial bodies), which flatters unity and starves PCH — which
+is exactly why the bgfx run above matters: real, declaration-heavy engine code
+shifted the ranking toward `/MP` and the parse-once levers, as predicted. The
+link section is the mirror caveat — its fixture is *symbol-count-dominated by
+design* (16k trivial functions), so it shows `/INCREMENTAL`/`/LTCG`/`/OPT`
+cleanly but starves `/DEBUG:FASTLINK` (trivial debug info). **That's the whole
+point of the thesis: measure your own split before choosing.** Full per-lever
+detail: `samples/bench/README.md`, `samples/bgfx/README.md`,
 `samples/fbuild/README.md`, `samples/link/README.md`, and `lessons-learned.md`
-#1–#6.
+#1–#9.

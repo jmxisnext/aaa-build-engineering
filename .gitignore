@@ -25,6 +25,10 @@ accel/tools/fastbuild/LICENSE.TXT
 **/_generated.bff
 *.fdb
 
+# Vendored bgfx/bx/bimg source trees (Track 3 workload tier).
+# Re-clone via accel/scripts/setup-bgfx.ps1; pinned SHAs in vendored.lock.json.
+accel/extern/
+
 # OS / editor noise
 Thumbs.db
 .DS_Store

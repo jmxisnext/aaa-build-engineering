@@ -324,6 +324,94 @@ real multi-GB-PDB codebase it's a large link-time win (trade: the PDB then
 depends on the objs — iteration tool, not shippable). Same shape as the PCH
 caveat in #4: the fixture must *have* the cost for the lever to show it.
 
+## 7. Adopting a real workload means pinning it to *your* toolchain
+
+**What happened:** To get off the synthetic fixture I vendored a real codebase
+(bgfx renderer core) via `setup-bgfx.ps1`. `master` would not compile: bx's
+`platform.h` `static_assert`s **MSVC ≥ 19.35 (Visual Studio 2022 17.5) + C++20**.
+This agent has VS 2019 Build Tools (**MSVC 19.29**) — the same `cl` the rest of
+Track 3 uses.
+
+**Root cause:** Live dependencies move their toolchain floor. `git log -S` on
+the assert pinned the bump to bx commit `5a20afe` (2025-05-26); the parent
+`d4096a8` (2025-04-26) still required only MSVC 19.27 / C++17. So the
+incompatibility was a *date*, not a wall.
+
+**The decision (and why):** three options —
+1. **Install VS 2022** — a machine-altering, admin-gated detour, disproportionate
+   to a benchmark workload (and the track's whole point was "no install needed").
+2. **Switch the workload to `clang-cl`** — VS2019 bundles clang 12, which clears
+   bx's `clang ≥ 11` gate. But `/MP` is an MSVC flag; clang-cl parallelizes via
+   the build system, not the compiler — it would break the `/MP`-vs-unity story
+   *and* mix toolchains between the synthetic fixture (cl) and the real one.
+3. **Pin the dependency to the last revision that builds with the installed
+   compiler** — bx `d4096a8`, bgfx `0e73452`, bimg `446b9eb`, all pre-bump.
+
+Chose #3. The whole track stays on one toolchain (`cl /std:c++17`), so the bgfx
+numbers are apples-to-apples with the fixture's — and **pinning the workload to
+match the toolchain is the reproducibility discipline the track already
+preaches** (`REPORT.md`: pin the MSVC version). SHAs recorded in
+`samples/bgfx/vendored.lock.json`; `setup-bgfx.ps1` defaults to them and fetches
+by SHA (GitHub allows `git fetch --depth 1 origin <sha>`).
+
+**The other half — building bgfx standalone without GENie** surfaced the usual
+clean-checkout gotchas: bx `#error`s without **both** `/Zc:__cplusplus` and
+`/Zc:preprocessor`; and bgfx's bundled `3rdparty/directx-headers` must be **first
+on the include path** or the VS2019 SDK's older `d3d12.h` wins and
+`D3D_FEATURE_LEVEL_12_2` is undeclared. "Compiles in the IDE, fails from a script"
+is the same agent-environment bug as #1 — the build step must reproduce the
+generator's include/define setup, not inherit it.
+
+## 8. Real code moved the lever ranking — the fixture was lying by construction
+
+**What happened:** On the synthetic fixture, unity (28×) crushed `/MP` (4×). On
+the bgfx renderer core (20 real TUs, best of 3 cold, `/c`), the order **flipped**:
+
+| config | fixture | bgfx |
+|---|---|---|
+| `/MP` (per-file) | 5.10 s · 4× | **1.63 s · 4.64×** |
+| unity | 0.72 s · 28× | 1.96 s · 3.86× |
+
+**Root cause:** the fixture was *one shared template header* `#include`d 32×, so
+amalgamating compiled that machinery **once** — a best case engineered for unity.
+bgfx's TUs are **genuinely distinct** renderers (Vulkan/GL/D3D11/D3D12) with
+little shared instantiation to collapse, so *parallelizing across 16 cores* beats
+*merging into one serial compile*. **Unity is not universally fastest — it wins
+when redundant shared work dominates, and real engines aren't always that shape.**
+
+**Two things only real code could show:**
+- **Unity's incremental cost, measured.** bgfx ships *both* a per-file build and
+  `amalgamated.cpp`. Edit one trivial file: per-file rebuilds **0.13 s**; the
+  amalgamation rebuilds the whole engine, **1.96 s — 15×.** That's the
+  edit-build-loop granularity unity trades for clean-build speed (studios tune
+  *chunk size* to split the difference).
+- **bgfx is front-end-bound, so `/d2cgsummary` finds nothing — and that's the
+  finding.** The back-end codegen profiler reports **0** hot functions; `/Bt+`
+  shows **61 %** of `bgfx.cpp` is the front end (parsing + instantiating
+  Vulkan/D3D/Windows declarations). The fitting levers are the **parse-once**
+  ones (the amalgamation, or a declaration-heavy PCH on `bgfx_p.h`) — *not*
+  `/LTCG`-class codegen tuning. The Track 3 thesis, confirmed on a shipping
+  engine: **measure your own front/back split before picking the lever.**
+
+## 9. PowerShell: a `[switch]` param silently type-constrains its variable
+
+**What happened:** `bench-bgfx.ps1` had `param(... [switch]$Probe)` and, 90 lines
+later, `$probe = foreach ($f in $perFile) { ... }` to collect rows. It threw
+*"Cannot convert System.Object[] to SwitchParameter"* at the `foreach` line — a
+baffling error pointing at code that contains no switch.
+
+**Root cause:** PowerShell variable names are **case-insensitive**, so `$probe`
+and `$Probe` are the *same variable* — and a `[switch]`-typed parameter applies a
+**type constraint** that persists on the variable. Assigning an array to `$probe`
+tried to coerce `Object[] → SwitchParameter` and failed. It only reproduced when
+run with the `param` block present (a fresh `pwsh -File`), which is why isolated
+repros of the loop passed and masked it.
+
+**Fix:** rename the local (`$probeRows`). **Lesson:** don't reuse a parameter's
+name (any case) for an unrelated local; a typed param turns the variable into a
+typed slot for the rest of the script. The diagnostic tell: a binding/conversion
+error citing a *type from your `param` block* at a line that doesn't mention it.
+
 **Why a build engineer cares:** "cut the 25-min build to 12" fixates on compile,
 but on a large monolithic target the **link is the serial tail that dominates
 *incremental* iteration** — the edit-build-run loop engineers run all day. Cache
