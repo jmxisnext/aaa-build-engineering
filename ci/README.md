@@ -57,14 +57,16 @@ From inside the containers, the Windows host's P4 broker is reachable at
 resolves on Linux hosts too (Docker Desktop on Windows resolves it
 automatically, but explicit is portable).
 
-The VCS root in TeamCity should be configured as:
+The VCS root is created automatically by `bootstrap-builds.ps1` (no manual UI
+step). For reference — and to configure it by hand on a brand-new server — its
+shape is:
 
 | Field | Value |
 |---|---|
 | Type | Perforce Helix Core |
-| Port | `host.docker.internal:1667` |
+| Port | `host.docker.internal:1667` (polled through the broker) |
 | User | `james` |
-| Client mapping | `//game/main/... //%P4CLIENT%/...` |
+| Workspace | **Stream** `//game/main` (`use-client=stream`) — not a client mapping |
 | Use ticket-based auth | (no auth required in this sandbox) |
 
 Verify the connection from the TeamCity UI; broker.log on the host will show
@@ -136,9 +138,14 @@ repo), adds the VCS trigger to Package, and installs the p4d `change-commit`
 trigger. See `lessons-learned.md` #7 for the durable-token, endpoint-topology, and
 self-service-token gotchas.
 
-> After a full `docker compose down -v`, recreate the `AAASandbox_GameMainStream`
-> VCS root (see *Wiring to Track 1*) and run `bootstrap-builds.ps1` **before** this —
-> the trigger references that root and the Package config, so both must exist first.
+> After a full `docker compose down -v`, just run `bootstrap-builds.ps1` **before**
+> this — it now creates the `AAASandbox` project and the `AAASandbox_GameMainStream`
+> VCS root (stream mode) from scratch, then the chain. The trigger references that
+> root and the Package config, so bootstrap must run first.
+>
+> The only steps NOT scripted are one-time per fresh server: walking TeamCity's
+> first-run setup wizard, and authorizing the agents (Agents → Unauthorized →
+> Authorize). "Hands-off reset" means hands-off *after* that initial setup.
 
 **Demo / self-test (proves both policy halves; exits non-zero on failure):**
 
