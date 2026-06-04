@@ -49,5 +49,8 @@ pwsh -File unreal/scripts/check-prereqs.ps1
 
 ## Status
 
-- **2026-06-04:** Track scaffolded. Prereq gate-check written (`scripts/check-prereqs.ps1`).
-  All three prereqs RED — engine + Lyra are the login-gated download blockers. VS2022 next.
+- **2026-06-04:** Track scaffolded; prereq gate-check written (`scripts/check-prereqs.ps1`).
+  **VS2022 17.14 installed** (NativeGame + .NET-desktop workloads) — gate-check confirms the
+  C++ x64 toolset **PASS** (1/3 green). Remaining RED: UE 5.x + Lyra (login-gated Epic
+  downloads to `G:\`). Next: once both land, gate goes green → UBT compiles `LyraEditor`
+  (Development/Win64) = slice #1.
