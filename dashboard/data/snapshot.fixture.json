@@ -1,0 +1,35 @@
+{
+  "generatedUtc": "2026-06-04T17:00:00Z",
+  "ci": {
+    "stale": false,
+    "configs": ["Compile", "Smoke Test", "Cook Data", "Package"],
+    "builds": [
+      {"config":"Compile","number":48,"cl":46,"status":"SUCCESS","statusText":"Success","durationSec":2.4,"finishUtc":"2026-06-04T16:59:48Z","url":"http://localhost:8111/build/420"},
+      {"config":"Smoke Test","number":47,"cl":46,"status":"SUCCESS","statusText":"Tests passed: 5","durationSec":1.2,"finishUtc":"2026-06-04T16:59:20Z","url":"http://localhost:8111/build/419"},
+      {"config":"Smoke Test","number":45,"cl":45,"status":"FAILURE","statusText":"Exit code 8 (Step: ctest)","durationSec":1.1,"finishUtc":"2026-06-04T16:58:47Z","url":"http://localhost:8111/build/406"},
+      {"config":"Package","number":44,"cl":44,"status":"SUCCESS","statusText":"Artifact hoops-brawl-cl44.tar.gz","durationSec":3.1,"finishUtc":"2026-06-04T16:40:00Z","url":"http://localhost:8111/build/402"},
+      {"config":"Compile","number":42,"cl":31,"status":"SUCCESS","statusText":"Success","durationSec":2.6,"finishUtc":"2026-06-04T16:20:00Z","url":"http://localhost:8111/build/390"}
+    ]
+  },
+  "accel": {
+    "compile":   {"serial":20.27,"mp":5.10,"unity":0.72,"pchWarm":4.37},
+    "fastbuild": {"miss":5.33,"hit":0.37},
+    "link":      {"full":0.081,"incremental":0.033,"ltcg":21.8},
+    "bgfx":      {"serial":7.57,"mp":1.63,"unity":1.96,"trivialEditPerFile":0.13,"trivialEditUnity":1.96}
+  },
+  "perforce": {
+    "stale": false,
+    "depots": ["//engine","//game","//tools","//thirdparty","//build","//spec"],
+    "streams": [
+      {"stream":"//game/main","type":"mainline","parent":"none"},
+      {"stream":"//game/dev","type":"development","parent":"//game/main"},
+      {"stream":"//game/feature-shotmeter","type":"development","parent":"//game/dev"},
+      {"stream":"//game/release-1-0","type":"release","parent":"//game/main"}
+    ],
+    "triggers": [
+      {"name":"require-engine-tag","type":"change-submit","desc":"form-policy: reject submit without an engine tag"},
+      {"name":"validate-submit","type":"change-content","desc":"depot-hygiene content validation"}
+    ],
+    "proxy": {"cachedMB":50,"upstreamFetchesClientB":0}
+  }
+}
