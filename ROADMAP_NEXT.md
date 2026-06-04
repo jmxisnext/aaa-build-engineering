@@ -71,7 +71,7 @@ Ryzen 7 7800X3D (8c/16t) · 31 GB RAM · **RTX 3060 12 GB** · F: 2.8 TB free.
   TeamCity + Docker all at once); CitySample's editor wants 32 GB+.
 - **8 cores caps distribution realism** — Horde/UBA on one box is an honest *mechanics* demo
   (overhead-overlap), not farm-scale numbers. Frame accordingly in interviews.
-- **Install UE5 / Lyra / DDC on F:** (2.8 TB free).
+- **Drive placement (F: is a slow external USB HDD — NOT for builds):** UE5 + Lyra + installs-to-keep → **G: (NVME_DURABLE, NVMe, 365 GB free)**; DDC + build/cook scratch → **D: (NVME_SCRATCH, NVMe, 404 GB free)**; source → **J: (Dev Drive)**. **F: (TRON, USB HDD, 2.8 TB) = archive/backup only** (`F:\Jammers_Archive`; external, not always attached). Keep heavy build I/O off C: (SATA OS drive). See auto-memory `dev-machine-specs`.
 - **Implication for the near-term plan:** Phase 1 (finalize 1–3 + dashboard) is
   CPU/infra/disk-bound → **unaffected by the GPU correction**. The hardware fix upgrades
   Phase 2 (Unreal), which is deferred anyway.
