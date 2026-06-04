@@ -1,0 +1,303 @@
+{
+  "generatedUtc": "2026-06-04T19:26:28Z",
+  "ci": {
+    "stale": false,
+    "configs": [
+      "Compile",
+      "Cook Data",
+      "Package",
+      "Smoke Test"
+    ],
+    "builds": [
+      {
+        "config": "Package",
+        "number": 5,
+        "cl": 51,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:23:54Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Package/520"
+      },
+      {
+        "config": "Cook Data",
+        "number": 6,
+        "cl": 51,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:23:42Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_CookData/519"
+      },
+      {
+        "config": "Smoke Test",
+        "number": 6,
+        "cl": 51,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:23:42Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_SmokeTest/518"
+      },
+      {
+        "config": "Compile",
+        "number": 6,
+        "cl": 51,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:23:30Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Compile/517"
+      },
+      {
+        "config": "Cook Data",
+        "number": 5,
+        "cl": 50,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:22:22Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_CookData/515"
+      },
+      {
+        "config": "Smoke Test",
+        "number": 5,
+        "cl": 50,
+        "status": "FAILURE",
+        "statusText": "Exit code 8 (Step: ctest (Command Line)) (new)",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:22:22Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_SmokeTest/514"
+      },
+      {
+        "config": "Compile",
+        "number": 5,
+        "cl": 50,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:22:11Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Compile/513"
+      },
+      {
+        "config": "Package",
+        "number": 4,
+        "cl": 49,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:19:53Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Package/512"
+      },
+      {
+        "config": "Cook Data",
+        "number": 4,
+        "cl": 49,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:19:42Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_CookData/511"
+      },
+      {
+        "config": "Smoke Test",
+        "number": 4,
+        "cl": 49,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:19:41Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_SmokeTest/510"
+      },
+      {
+        "config": "Compile",
+        "number": 4,
+        "cl": 49,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:19:29Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Compile/509"
+      },
+      {
+        "config": "Package",
+        "number": 3,
+        "cl": 48,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:18:13Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Package/508"
+      },
+      {
+        "config": "Cook Data",
+        "number": 3,
+        "cl": 48,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:18:01Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_CookData/507"
+      },
+      {
+        "config": "Smoke Test",
+        "number": 3,
+        "cl": 48,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:18:01Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_SmokeTest/506"
+      },
+      {
+        "config": "Compile",
+        "number": 3,
+        "cl": 48,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:17:49Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Compile/505"
+      },
+      {
+        "config": "Package",
+        "number": 2,
+        "cl": 47,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:16:34Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Package/504"
+      },
+      {
+        "config": "Cook Data",
+        "number": 2,
+        "cl": 47,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:16:21Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_CookData/503"
+      },
+      {
+        "config": "Smoke Test",
+        "number": 2,
+        "cl": 47,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T19:16:20Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_SmokeTest/502"
+      },
+      {
+        "config": "Compile",
+        "number": 2,
+        "cl": 47,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T19:16:09Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Compile/501"
+      },
+      {
+        "config": "Package",
+        "number": 1,
+        "cl": 46,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T17:04:53Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Package/420"
+      },
+      {
+        "config": "Cook Data",
+        "number": 1,
+        "cl": 46,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T17:04:41Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_CookData/419"
+      },
+      {
+        "config": "Smoke Test",
+        "number": 1,
+        "cl": 46,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 12.0,
+        "finishUtc": "2026-06-04T17:04:41Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_SmokeTest/418"
+      },
+      {
+        "config": "Compile",
+        "number": 1,
+        "cl": 46,
+        "status": "SUCCESS",
+        "statusText": "Success",
+        "durationSec": 11.0,
+        "finishUtc": "2026-06-04T17:04:28Z",
+        "url": "http://localhost:8111/buildConfiguration/AAASandbox_Compile/417"
+      }
+    ]
+  },
+  "accel": {
+    "bgfx": {
+      "mp": 1.63,
+      "trivialEditUnity": 1.94,
+      "trivialEditPerFile": 0.13,
+      "unity": 1.94,
+      "serial": 7.49
+    },
+    "compile": {
+      "mp": 5.08,
+      "pchWarm": 4.47,
+      "unity": 0.73,
+      "serial": 18.68
+    },
+    "fastbuild": {
+      "hit": 0.36,
+      "miss": 5.46
+    },
+    "link": {
+      "full": 0.084,
+      "ltcg": 21.714,
+      "incremental": 0.033
+    }
+  },
+  "perforce": {
+    "stale": false,
+    "depots": [
+      "build",
+      "depot",
+      "engine",
+      "game",
+      "thirdparty",
+      "tools"
+    ],
+    "streams": [
+      {
+        "stream": "//game/dev",
+        "type": "development",
+        "parent": "//game/main"
+      },
+      {
+        "stream": "//game/feature-shotmeter",
+        "type": "development",
+        "parent": "//game/dev"
+      },
+      {
+        "stream": "//game/main",
+        "type": "mainline",
+        "parent": "none"
+      },
+      {
+        "stream": "//game/release-1-0",
+        "type": "release",
+        "parent": "//game/main"
+      }
+    ],
+    "triggers": [],
+    "proxy": null
+  }
+}
