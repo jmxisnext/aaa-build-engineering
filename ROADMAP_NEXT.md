@@ -5,8 +5,8 @@ audit of tracks 1–3, a 2026 landscape update for tracks 4–5, the "workload t
 hardware reality, and the agreed near-term sequence. Planted 2026-06-04.
 
 **Strategy: consolidate-first.** Finish tracks 1–3 + the dashboard, THEN re-sanity the order
-for tracks 4–5. Phase 1 below is locked; Phase 2 is deliberately left to be sequenced after
-the dashboard ships.
+for tracks 4–5. Phase 1 below is locked and DONE; **Phase 2 was sequenced 2026-06-04 once the
+dashboard shipped** — foundation-first (Track 4 → Horde → Track 5 → Capstone), see below.
 
 ## Track audit — where 1–3 actually stand
 
@@ -111,18 +111,40 @@ Ryzen 7 7800X3D (8c/16t) · 31 GB RAM · **RTX 3060 12 GB** · F: 2.8 TB free.
    (compile/bgfx/link/FASTBuild), live perforce streams/depots. TDD throughout (`dashboard/tests/`);
    the real capture even caught a collector timestamp bug the fixture had masked. **Closes Phase 1.**
 
-### Phase 2 — TBD: re-sanity the order after the dashboard ships
+### Phase 2 — SEQUENCED 2026-06-04: foundation-first (Track 4 → Horde → Track 5 → Capstone)
 
-Candidates (sequence to be decided once Phase 1 is done and the dashboard is visible):
-- **Track 4 — Unreal**: BuildGraph (compile→cook→package via `RunUAT`) on **Lyra**, wired into
-  TeamCity. [~1–2 sessions] — *workload tier injection #2 (Lyra)*
-- **Horde-on-one-box + UBA** running that BuildGraph (most differentiating; hardware-bounded;
-  time-box it). [opp #2]
-- **Track 5 — cook pipeline + WPF tool** (the long pole, ~2–3 weeks): Python cooker (dep graph +
-  content-hash incremental + `.toc`) → WPF UI → replaces Track 2's stub Cook Data → feeds the
-  dashboard. Frame as a hand-rolled DDC/CAS. [opp #3]
-- **Capstone stitch** — end-to-end submit→CI→cook→package→versioned artifact; repo-as-demo;
-  containerized/ephemeral agent (opp #4); Zen/DDC writeup.
+Re-sanitized after the dashboard shipped. The four candidates share a hard dependency spine —
+Track 4 authors the BuildGraph + injects Lyra; **Horde *runs that BuildGraph*** (so it cannot
+precede Track 4); **Capstone stitches everything** (so it's last); **Track 5 is the orthogonal
+long pole**, and its urgency drops once Track 4's `RunUAT` cook covers the immediate cook gap.
+Decision: **foundation-first** — reuse the already-proven TeamCity infra for a fast, recognizable
+artifact, then layer the differentiator onto the same graph.
+
+**Step 1 (NEXT) — Track 4: Unreal BuildGraph on Lyra, wired into TeamCity.** [~1–2 sessions]
+*Workload tier injection #2 (Lyra).*
+- **Demoable artifact:** Lyra compiled → cooked → packaged by a **BuildGraph XML** script, executed
+  from TeamCity, emitting a **CL-version-stamped package** (extends the Track 2 version-stamp
+  pattern), with the **dashboard ingesting cook/package durations**.
+- **Smallest runnable first slice (loop on this):** Lyra **compiles via UBT from the command line**.
+  Then grow outward: cook (`RunUAT BuildCookRun`) → package → wrap in BuildGraph → wire into TeamCity.
+- Hardware: GPU fine (3060 12 GB runs the Lyra editor); RAM 31 GB is the ceiling — **serialize**
+  (don't run UE + TeamCity + Docker heavy at once). Source on J:, UE+Lyra on G:, DDC/scratch on D:.
+
+**Step 2 — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2; **time-boxed ~1 session**]
+- Most differentiating Unreal signal; hardware-bounded (8 cores = honest **overhead-overlap, not
+  farm-scale** — frame it that way). Strongest line: "same BuildGraph in *both* TeamCity and Horde."
+- Time-box it: get the vocabulary + one real run; don't sink sessions into hardware-capped numbers.
+  Watch RAM — UE + Horde + agent serialized, not concurrent with the TeamCity stack.
+
+**Step 3 — Track 5: cook pipeline + WPF tool** (the long pole, ~2–3 weeks; **full scope, deferred**).
+- Python cooker (dep graph + content-hash incremental + `.toc`) → **WPF UI** (kept — distinct
+  artist-tooling signal) → replaces Track 2's stub Cook Data → feeds the dashboard. Frame as a
+  hand-rolled **DDC/CAS**; speak to incremental cook (UE 5.7 beta). [opp #3]
+- Deferred to here because Step 1's `RunUAT` cook already gives a *real* UE cook — Track 5 is the
+  conceptual-depth + artist-tooling story, not the only cook on the table.
+
+**Step 4 — Capstone stitch** (last). End-to-end submit→CI→cook→package→versioned artifact;
+repo-as-demo; containerized/ephemeral agent (opp #4); Zen/DDC writeup.
 
 ## High-leverage opportunities (ranked, from the audit + web research)
 
