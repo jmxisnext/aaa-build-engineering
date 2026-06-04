@@ -3,7 +3,7 @@
 ## Resume from
 Branch: main   |   Last commit: 3bb807b - docs(track4): mark Phase 1 step 4 (dashboard) done; close out Phase 1
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/` + `localbak/`, vendor binaries, `accel/extern/`, and `accel/.metrics/` are gitignored. `git push` to GitHub origin is permission-blocked for the agent - the human runs `! git push origin main`. **`origin/main` is at `3cc1166`; HEAD is 15 commits ahead (16 after this closeout): the prior 5 (`a2504ff`, `4e25638`, `f3c4e6f`, `552f52a`, `90aa0e3`) + this session's 10 (`f9a7d00`..`3bb807b`) + the closeout. Human: `! git push origin main` when ready.**
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/` + `localbak/`, vendor binaries, `accel/extern/`, and `accel/.metrics/` are gitignored. `git push` to GitHub origin is permission-blocked for the agent - the human runs `! git push origin main`. **Pushed 2026-06-04: `origin/main` advanced `3cc1166` -> `9781c4d` - all prior-unpushed commits + this session's Phase-1/dashboard work + the closeout are now on GitHub. Only this handoff-status touch-up is ahead of `origin/main`; fold it into the next push.**
 
 ## What was just built
 Executed the full 10-task dashboard plan (`docs/superpowers/plans/2026-06-04-dashboard.md`) via TDD - **Phase 1 step 4 (the observability dashboard) is DONE**:
