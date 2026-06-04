@@ -37,9 +37,13 @@ looked fine. **Free physical RAM ≠ available commit when there is no pagefile.
    for a plain compile; it's a deliberate Phase 2 *Step 2* demo).
    Build then succeeded with `-MaxParallelActions=8 -NoUBA`.
 
-**Durable fix (the proper answer):** **Enable a pagefile** — system-managed, or a fixed
-~32 GB on `D:` (NVMe scratch). That unpins the commit limit from physical RAM and lets
-UBA + Docker + a clean build coexist without juggling. (Needs a reboot to take effect.)
+**Durable fix (the proper answer, APPLIED 2026-06-04):** **Enable a pagefile.** Set a fixed
+**64 GB pagefile on `D:`** (NVMe scratch) via the `PagingFiles` registry value
+(`D:\pagefile.sys 65536 65536`). Fixed (initial = max) avoids auto-growth lag under sudden
+commit bursts. This unpins the commit limit from physical RAM (31 GB → ~95 GB after reboot)
+and lets UBA + Docker + a clean build coexist without juggling. Takes effect on **reboot**.
+(Tradeoff: a pagefile only on D: — none on C: — means no automatic kernel crash dump; fine
+for a build box.)
 
 **Why a build engineer cares:**
 - On Windows, **commit charge — not "Available RAM" — is what kills PCH-heavy parallel C++

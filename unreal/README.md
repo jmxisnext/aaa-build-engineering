@@ -52,8 +52,11 @@ pwsh -File unreal/scripts/check-prereqs.ps1
 - **2026-06-04:** Prereqs **3/3 green** — VS2022 17.14 · UE 5.6.1 (`G:\UnrealEngine\UE_5.6`) ·
   Lyra (`G:\UnrealProjects\LyraStarterGame\Lyra.uproject`). **Slice #1 DONE:** `LyraEditor`
   (Win64/Development) compiles green via `compile-lyra.ps1` — editor module DLLs link.
-  Working config on this 31 GB / no-pagefile box: **`-NoUBA -MaxParallelActions=8`** (a cold
-  build OOM'd on *commit-limit* exhaustion, not RAM — see `lessons-learned.md` #1).
+  Working config: **`-NoUBA -MaxParallelActions=8`** (a cold build OOM'd on *commit-limit*
+  exhaustion, not RAM — see `lessons-learned.md` #1). **Durable fix applied:** fixed **64 GB
+  pagefile on `D:`** (commit limit 31 → ~95 GB) — **takes effect on next reboot**; after that,
+  cook/package/UBA are commit-safe and the `-NoUBA` workaround becomes optional.
   **Caveat:** the captured 3.6 s was an *incremental* build, NOT a cold baseline — a clean
-  `-Clean` rebuild is still owed for the real number. Next rungs: cold baseline → `RunUAT
-  BuildCookRun` (cook) → package → BuildGraph → TeamCity.
+  `-Clean` rebuild is still owed for the real number (best captured post-reboot, alongside the
+  UBA on/off comparison). Next rungs: cold baseline → `RunUAT BuildCookRun` (cook) → package →
+  BuildGraph → TeamCity.
