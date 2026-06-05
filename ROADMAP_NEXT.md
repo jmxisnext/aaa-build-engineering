@@ -21,7 +21,7 @@ dashboard shipped** — foundation-first (Track 4 → Horde → Track 5 → Caps
   Package **version-stamp** with the P4 changelist # (S); **build-failure notification** (S–M);
   **static REST dashboard** (M). The C++ sample is non-trivial in structure, thin in logic
   (adequate).
-- **Track 3 (accel) — mechanics complete, every lever measured** (`/MP` 3.97×, unity, a
+- **Track 3 (accel) — mechanics complete, every lever measured** (`/MP` ~4.0×, unity, a
   PCH hypothesis tested *and refuted* with `/Bt+`, FASTBuild cache 14.4×, linker
   `/INCREMENTAL` + `/LTCG` 269× + symbol-bloat sweep). **Weakness: synthetic 32-TU fixture**
   → can't say "I cut a real 25-min build." Fix = adopt a real codebase (workload tier).
@@ -104,7 +104,7 @@ Ryzen 7 7800X3D (8c/16t) · 31 GB RAM · **RTX 3060 12 GB** · F: 2.8 TB free.
    parallelism. Closes Track 2's roadmap dashboard **and** is the #1 cross-portfolio differentiator.
    [~2–3 days]
    → **2026-06-04: DONE.** ✅ Two-stage pipeline: `collect-metrics.ps1` gathers three live feeds
-   (TeamCity REST · `bench -Json` emits · `p4` streams/depots) → committed `snapshot.json` →
+   (TeamCity REST · `bench -Json` emits · `p4` streams/depots; a 4th `unreal/.metrics` feed was folded in later via `8cb39c6`) → committed `snapshot.json` →
    `build-dashboard.ps1` renders a self-contained `dashboard.html` (inline SVG, **no JS framework/CDN**,
    byte-deterministic). Real captured demo state: **23 CI builds** across all 4 configs (CLs 46–51) with
    **one genuine red** Smoke Test (a `ctest` break injected + fixed), real accel numbers
@@ -120,7 +120,8 @@ long pole**, and its urgency drops once Track 4's `RunUAT` cook covers the immed
 Decision: **foundation-first** — reuse the already-proven TeamCity infra for a fast, recognizable
 artifact, then layer the differentiator onto the same graph.
 
-**Step 1 (NEXT) — Track 4: Unreal BuildGraph on Lyra, wired into TeamCity.** [~1–2 sessions]
+**Step 1 — Track 4: Unreal BuildGraph on Lyra, wired into TeamCity.** [~1–2 sessions]
+→ **2026-06-04: DONE.** ✅ All six rungs shipped: compile (`da76060`) → cook (`fa39c68`) → package (`4cf1664`) → BuildGraph `lyra-pipeline.xml` (`7f2dda1`) → CL-version-stamp + TeamCity Lyra config (`923f0d3`) → dashboard Track-4 panel ingesting `unreal/.metrics` (`8cb39c6`). The demoable artifact below is complete — see `unreal/README.md`.
 *Workload tier injection #2 (Lyra).*
 - **Demoable artifact:** Lyra compiled → cooked → packaged by a **BuildGraph XML** script, executed
   from TeamCity, emitting a **CL-version-stamped package** (extends the Track 2 version-stamp
@@ -130,11 +131,23 @@ artifact, then layer the differentiator onto the same graph.
 - Hardware: GPU fine (3060 12 GB runs the Lyra editor); RAM 31 GB is the ceiling — **serialize**
   (don't run UE + TeamCity + Docker heavy at once). Source on J:, UE+Lyra on G:, DDC/scratch on D:.
 
-**Step 2 — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2; **time-boxed ~1 session**]
-- Most differentiating Unreal signal; hardware-bounded (8 cores = honest **overhead-overlap, not
-  farm-scale** — frame it that way). Strongest line: "same BuildGraph in *both* TeamCity and Horde."
-- Time-box it: get the vocabulary + one real run; don't sink sessions into hardware-capped numbers.
-  Watch RAM — UE + Horde + agent serialized, not concurrent with the TeamCity stack.
+**Step 2 (NEXT) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2; **time-boxed ~1 session**]
+- **Demoable artifact (the win condition):** a local **Horde Server + one agent** runs the
+  **unmodified** `unreal/buildgraph/lyra-pipeline.xml` and produces the **same CL-version-stamped
+  package + `.metrics`** the TeamCity path already produces — and the **dashboard shows a Horde run
+  alongside the TeamCity run** (a "Horde vs TeamCity" row), proving the *same graph runs under two
+  orchestrators*. Value proposition = **graph portability + Horde job-submission mechanics**, NOT a
+  speed/scale number (see hardware note).
+- **Smallest runnable first slice (loop on this):** Horde Server up + one agent authorized + the
+  agent runs a **single Compile node** of the graph end-to-end. Then grow: full graph → CL-stamp
+  parity with the TeamCity package → dashboard ingests the Horde `.metrics` as a second source.
+- **Hardware reality (don't over-promise):** 8 cores = honest **overhead-overlap, not farm-scale**.
+  UBA is ~29% *slower* single-box (lesson #3 — its win is remote agents, which one box lacks), and
+  even unlimited RAM won't change that (the cost is ~22 s server/CAS/detour setup, not memory). The
+  **64 GB pagefile** (lesson #1) keeps the Horde + agent + UE stack under the commit limit so the run
+  *completes* — but it's disk-backed, not real RAM, so still **serialize** (UE + Horde + agent, NOT
+  concurrent with the TeamCity/Docker stack); a working set over 31 GB physical pages to disk and
+  thrashes. Strongest interview line: **"the same BuildGraph runs in both TeamCity and Horde."**
 
 **Step 3 — Track 5: cook pipeline + WPF tool** (the long pole, ~2–3 weeks; **full scope, deferred**).
 - Python cooker (dep graph + content-hash incremental + `.toc`) → **WPF UI** (kept — distinct

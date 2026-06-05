@@ -11,7 +11,7 @@ This is not a one-off experiment. It's an ongoing skill ladder.
 - `HANDOFF.md` — current session resume.
 - `SEEDS.md` — parked ideas.
 - Subdirs added per track as work progresses: `perforce/`, `ci/`, `accel/`, `unreal/`, `pipeline/`.
-- `dashboard/` — observability dashboard aggregating the three finished tracks (CI, accel, perforce) into one self-contained `dashboard.html` that opens offline. Built from a committed real snapshot (`collect-metrics` → `snapshot.json` → `build-dashboard`).
+- `dashboard/` — observability dashboard aggregating all four built tracks (CI, accel, perforce, Unreal/Lyra) into one self-contained `dashboard.html` that opens offline. Built from a committed real snapshot (`collect-metrics` → `snapshot.json` → `build-dashboard`).
 
 ## How to use this repo across sessions
 

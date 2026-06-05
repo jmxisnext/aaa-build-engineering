@@ -36,6 +36,14 @@ accel/.metrics/
 unreal/.logs/
 unreal/.metrics/
 
+# Dashboard preview output (throwaway; the committed artifact is dashboard.html)
+dashboard/_preview.html
+
+# Environment files — never commit real secrets. ci/.env is intentionally tracked
+# (contains only TEAMCITY_VERSION); re-include it explicitly.
+**/.env
+!ci/.env
+
 # OS / editor noise
 Thumbs.db
 .DS_Store

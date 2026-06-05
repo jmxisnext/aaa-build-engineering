@@ -16,7 +16,7 @@ param(
     [string]$P4Port       = "localhost:1666",
     [string]$P4User       = "james",
     [string]$TriggerHome  = "C:\PerforceSandbox\triggers",
-    [string]$RepoTriggers = "J:\jammers-lab\aaa-build-engineering\perforce\triggers",
+    [string]$RepoTriggers = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\perforce\triggers')),
     [string]$NotifyScript = "C:\PerforceSandbox\triggers\notify-teamcity.ps1"   # the DEPLOYED path
 )
 $ErrorActionPreference = "Stop"

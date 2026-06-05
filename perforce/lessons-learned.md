@@ -1,6 +1,6 @@
 # Perforce lessons learned (Track 1)
 
-Real-world gotchas hit during the sandbox build-out. Each is the kind of thing an interviewer might phrase as *"tell me about a time you got bitten by Perforce."*
+Real-world gotchas hit during the sandbox build-out — each a war story worth keeping: what bit, why a build engineer cares, and the fix.
 
 ## 1. `noallwrite` makes local files read-only — silent edit loss
 
@@ -116,7 +116,7 @@ Two gotchas:
 
 **Why a build engineer cares:** This is how you reconcile two requirements that look contradictory — "freeze all submits" and "the build pipeline must keep submitting." The exemption belongs in *policy* (versioned, reviewable, logged), not in an operator remembering to bypass. And because allowed submits PASS *through* the broker, they stay in `broker.log` — closing the audit-trail gap that bypassing opened.
 
-**Interview-ready bullet:** *"A broker freeze that blocks everyone forces people to bypass the broker, which destroys your audit trail. The fix is an ordered allowlist — service-account `pass` rule before the blanket `reject`, anchored user regex — so automation keeps moving AND every submit decision still lands in the broker log."*
+**Takeaway:** *"A broker freeze that blocks everyone forces people to bypass the broker, which destroys your audit trail. The fix is an ordered allowlist — service-account `pass` rule before the blanket `reject`, anchored user regex — so automation keeps moving AND every submit decision still lands in the broker log."*
 
 ## 12. `change-submit` vs `change-content` — register at the phase that has your data
 

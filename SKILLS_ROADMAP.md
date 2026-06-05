@@ -100,7 +100,7 @@ Five tracks. Each track produces one concrete artifact you can demo or reference
 - **Watch** GDC talks tagged "build" / "tools" / "engine programming." Many are free on the GDC Vault YouTube channel.
 - Pick up working vocabulary: *unity build, jumbo build, PCH, link-time codegen, ODR violation, distributed build, content hashing, deterministic build, hermetic build, asset cooking, content-addressable storage, change-list, shelved CL, stream graph, edge server, broker, automation graph.*
 
-## Skill self-check — questions to answer fluently
+## Skill self-check — questions this practice should let you answer
 
 By end of track 2 you should be able to answer:
 - How do you debug a flaky CI build that fails 1 in 20 runs only on one agent?

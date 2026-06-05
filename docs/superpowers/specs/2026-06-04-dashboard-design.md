@@ -1,4 +1,4 @@
-# Design — Build Pipeline Observability Dashboard (Track 4 / Phase 1 step 4)
+# Design — Build Pipeline Observability Dashboard (Phase 1 step 4 — capstone aggregator)
 
 **Date:** 2026-06-04
 **Status:** approved design, pre-implementation

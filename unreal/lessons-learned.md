@@ -54,7 +54,7 @@ for a build box.)
 - Capping parallelism is the *naive* lever (and here it didn't work). The senior move is
   knowing commit-vs-physical-RAM and fixing the actual constraint (pagefile / VM footprint).
 
-**Interview TL;DR:**
+**Takeaway:**
 - `C3859 "failed to create virtual memory for PCH"` + `C1076 "internal heap limit reached"`
   with free physical RAM = **commit-limit exhaustion**, usually a too-small/disabled pagefile.
 - Diagnose with commit limit vs in-use (`Win32_OperatingSystem` Total/FreeVirtualMemory),
@@ -95,7 +95,7 @@ With that, the cold graph rebuilds from scratch: `Creating makefile ... (no exis
 - Build outputs are **scattered per-module/per-plugin**, not in one tree. A reliable clean walks
   every plugin's `Intermediate`/`Binaries`, or you get a partial-cold build with hidden cache hits.
 
-**Interview TL;DR:**
+**Takeaway:**
 - UBT `-Clean` = remove target binaries only; obj/PCH + makefile survive → next build is a fast
   relink, not a cold compile. Force cold by deleting `Intermediate\Build` + `Binaries` project-wide
   (root **and** every plugin).
@@ -130,7 +130,7 @@ helper agents**; with **none configured**, you pay the coordination tax for zero
 - Earlier (lesson #1) UBA also *cost* via its large VA reservation under a tight commit limit. Same
   theme: an accelerator has real fixed costs (memory, setup) you must earn back with scale.
 
-**Interview TL;DR:**
+**Takeaway:**
 - Single box, no remote agents: **UBA on 108s vs off 84s** — accelerator overhead (~22s server/
   CAS/detour) isn't amortised; action time was within ~2s.
 - UBA/distributed-compile tools pay off **across machines** (Horde). Benchmark in the deployment
@@ -175,7 +175,7 @@ overrides only the Local node. Total consolidation needs the project/shared node
 - **"Move the DDC to fast disk" is multi-node**, not one path - verify *where bytes actually
   landed*, don't assume one env var relocated the whole cache.
 
-**Interview TL;DR:**
+**Takeaway:**
 - Cold Lyra Win64 cook: **~24 min, 15.3k shaders, 1.8 GB** cooked - shader compilation dominates;
   warm DDC is the lever.
 - `Win64` (build) cooks to `Saved\Cooked\Windows` (cooked) - mind the rename in clean/stage steps.

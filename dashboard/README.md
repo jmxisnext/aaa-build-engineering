@@ -1,4 +1,4 @@
-# dashboard/ — Track 4: build-pipeline observability
+# dashboard/ — build-pipeline observability (capstone aggregator)
 
 **Goal:** one self-contained `dashboard.html` that shows the whole pipeline at a
 glance — all four tracks (CI, accel, perforce, and the Unreal/Lyra pipeline) on a
@@ -21,7 +21,7 @@ one screen — the "here's the pipeline I built" artifact you point an interview
 Two stages, deliberately split so the *capture* (needs infra) is separate from
 the *render* (pure, deterministic, runs anywhere):
 
-1. **`collect-metrics.ps1`** queries the three feeds and writes a normalized
+1. **`collect-metrics.ps1`** queries the four feeds and writes a normalized
    `data/snapshot.json`. Each feed independently falls back to the prior
    snapshot's section (marked `stale`) if its source is unreachable — so a
    partial infra state still produces a complete, committable snapshot.

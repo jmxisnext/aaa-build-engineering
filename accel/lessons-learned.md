@@ -1,8 +1,8 @@
 # Build-acceleration lessons learned (Track 3)
 
 Same numbered format as `perforce/lessons-learned.md` and
-`ci/lessons-learned.md` — each entry is the kind of thing an interviewer
-phrases as *"tell me about a time you got bitten by the build."* Appended as
+`ci/lessons-learned.md` — each entry is a build-acceleration war story: what bit,
+why a build engineer cares, and the transferable lesson. Appended as
 they happen, not batched at the end of the track.
 
 ## 1. MSVC is installed but not on PATH — vcvars only mutates its own process
@@ -57,7 +57,7 @@ into a red agent build. And pin the MSVC version
 (`vcvars64.bat -vcvars_ver=14.29`) for reproducible codegen — `-latest` is a
 sandbox convenience, not a production guarantee.
 
-**Interview-ready bullet:** *"On Windows the C++ compiler is gated behind
+**Takeaway:** *"On Windows the C++ compiler is gated behind
 vcvars, which only mutates its own cmd process — so 'cl not found' usually
 means 'not activated,' not 'not installed.' Locate it with vswhere, replay
 the vcvars environment into your shell, and make the CI build step do the
@@ -87,7 +87,7 @@ parallelizes. And `/MP` (parallel *within* a project) is orthogonal to MSBuild
 `/m` (parallel *across* projects) — real builds enable both, and conflating
 them is a common misconfiguration (e.g. `/m` × `/MP` oversubscribing cores).
 
-**Interview-ready bullet:** *"`/MP` is a one-flag ~4× on a 16-core box — but
+**Takeaway:** *"`/MP` is a one-flag ~4× on a 16-core box — but
 not 16×, because half those cores are hyperthreads, the `cl` front-end and obj
 writes aren't parallel, and every TU still re-parses the same headers. That
 last point is why PCH and unity builds are the next lever: `/MP` parallelizes
@@ -145,7 +145,7 @@ a few heavy headers are included everywhere (the common AAA case), but it
 trades away incremental speed and can expose ODR bugs — so you tune chunk size
 rather than going all-in on one blob.
 
-**Interview-ready bullet:** *"On a build dominated by redundant template
+**Takeaway:** *"On a build dominated by redundant template
 instantiation, a unity build gave ~28× by compiling the shared STL machinery
 once instead of per-TU — beating `/MP`'s 4× outright, because eliminating
 redundant work beats parallelizing it. But that's fixture-specific: real
@@ -205,7 +205,7 @@ detail) before choosing — PCH for parse-bound, unity/jumbo for
 instantiation-bound, `/MP` for the free parallel baseline, and the three
 compose.
 
-**Interview-ready bullet:** *"I expected PCH to rival unity since both parse the
+**Takeaway:** *"I expected PCH to rival unity since both parse the
 header once — but PCH got ~4.4× vs unity's 28×, because PCH caches parsed
 declarations, not template instantiation or `/O2` codegen, and `/Bt+` showed my
 per-TU cost was ~50 % back-end. PCH attacks parse cost and keeps per-TU
@@ -256,7 +256,7 @@ toolchain, don't assume it) and `ci/lessons-learned.md` #2 (the fresh agent had
 no `p4`): hermetic build tools need the environment passed in explicitly — which
 is the *feature* that makes cache keys and distributed builds reproducible.
 
-**Interview-ready bullet:** *"FASTBuild cold ≈ /MP — both are parallel compiles
+**Takeaway:** *"FASTBuild cold ≈ /MP — both are parallel compiles
 — but its cache made a clean build of unchanged code 14× faster (0.37 s vs
 5.3 s), every obj a cache hit. That's the win /MP/unity/PCH can't give: they
 speed one compile; the cache makes the second identical compile free, which is
@@ -323,6 +323,24 @@ there is*. This fixture's is trivial, so FASTLINK ≈ full (0.078 vs 0.081 s). O
 real multi-GB-PDB codebase it's a large link-time win (trade: the PDB then
 depends on the objs — iteration tool, not shippable). Same shape as the PCH
 caveat in #4: the fixture must *have* the cost for the lever to show it.
+
+**Why a build engineer cares:** "cut the 25-min build to 12" fixates on compile,
+but on a large monolithic target the **link is the serial tail that dominates
+*incremental* iteration** — the edit-build-run loop engineers run all day. Cache
+makes the second *compile* free; it does nothing for the link, which runs every
+time. The link axis is its own set of levers: `/INCREMENTAL` for iteration,
+DLL-splitting + dead-strip to cut symbol count, `/LTCG` reserved for release
+(where you pay link time to buy runtime perf).
+
+**Takeaway:** *"After /MP and caching make compilation cheap, the
+serial link becomes the floor on incremental iteration — and none of the compile
+levers touch it. /INCREMENTAL patches the exe in place (I measured ~2.5× faster
+relink) at the cost of a fatter binary and incompatibility with /OPT:REF/ICF and
+/LTCG, so it's a debug lever, not release. /LTCG is the opposite — /GL moves
+codegen to link, which is why release links are slow (269× the plain link in my
+bench). Profile with link /time+ (the linker's /Bt+), and split monolithic
+targets into DLLs to cut the symbol count that drives both link time and binary
+size."*
 
 ## 7. Adopting a real workload means pinning it to *your* toolchain
 
@@ -412,20 +430,19 @@ name (any case) for an unrelated local; a typed param turns the variable into a
 typed slot for the rest of the script. The diagnostic tell: a binding/conversion
 error citing a *type from your `param` block* at a line that doesn't mention it.
 
-**Why a build engineer cares:** "cut the 25-min build to 12" fixates on compile,
-but on a large monolithic target the **link is the serial tail that dominates
-*incremental* iteration** — the edit-build-run loop engineers run all day. Cache
-makes the second *compile* free; it does nothing for the link, which runs every
-time. The link axis is its own set of levers: `/INCREMENTAL` for iteration,
-DLL-splitting + dead-strip to cut symbol count, `/LTCG` reserved for release
-(where you pay link time to buy runtime perf).
+**Why a build engineer cares:** Build and CI automation on Windows is mostly
+PowerShell/Python glue, and this is the kind of bug that passes every isolated
+test and only fails in the real run — it reproduced solely under `pwsh -File`
+with the `param` block present, so a quick REPL repro of the loop looked fine.
+Subtle scripting-language footguns in the automation layer cost real debugging
+time and quietly erode trust in the build tooling. Treat build scripts with the
+same rigor as build code: distinct names, exercise the real entry point (not
+just the inner block) in CI, and never alias a typed parameter.
 
-**Interview-ready bullet:** *"After /MP and caching make compilation cheap, the
-serial link becomes the floor on incremental iteration — and none of the compile
-levers touch it. /INCREMENTAL patches the exe in place (I measured ~2.5× faster
-relink) at the cost of a fatter binary and incompatibility with /OPT:REF/ICF and
-/LTCG, so it's a debug lever, not release. /LTCG is the opposite — /GL moves
-codegen to link, which is why release links are slow (269× the plain link in my
-bench). Profile with link /time+ (the linker's /Bt+), and split monolithic
-targets into DLLs to cut the symbol count that drives both link time and binary
-size."*
+**Takeaway:** *"A PowerShell `[switch]` parameter puts a persistent
+type constraint on its variable, and variable names are case-insensitive — so
+reusing `$probe` for an array threw 'cannot convert Object[] to SwitchParameter'
+90 lines from the `param` block, and only when run as `pwsh -File`, so isolated
+repros hid it. Build automation is mostly this kind of glue: test the real entry
+point, not just the inner loop, and never reuse a typed param's name for an
+unrelated local."*

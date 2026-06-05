@@ -22,8 +22,8 @@ emitting a **CL-version-stamped package** (extends the Track 2 version-stamp pat
 2. `RunUAT BuildCookRun` — cook content for Win64. ✅ **DONE 2026-06-04** via `cook-lyra.ps1` (cold cook **23.9 min**, 15,317 shaders, 1.8 GB cooked; DDC on `D:` → lesson #4).
 3. `RunUAT BuildCookRun` — stage + package a shippable build. ✅ **DONE 2026-06-04** via `package-lyra.ps1` (build `LyraGame` + stage + pak + archive, **90.5 s** reusing the cook; **1.72 GB** runnable build → `D:\LyraPackaged`).
 4. Author the above as a **BuildGraph** (`.xml`) — `RunUAT BuildGraph`. ✅ **DONE 2026-06-04** — `buildgraph/lyra-pipeline.xml` (Compile→Cook→Package nodes) runs end-to-end via `buildgraph-lyra.ps1` (**72.9s** incremental; surfaced the cook-platform rename a 3rd time → lesson #4).
-5. Wire the BuildGraph into a **TeamCity** build config; version-stamp with the P4 CL.
-6. Feed cook/package durations into the dashboard.
+5. Wire the BuildGraph into a **TeamCity** build config; version-stamp with the P4 CL. ✅ **DONE 2026-06-04** (`923f0d3` — `stamp-lyra-package.ps1` + TeamCity Lyra config; package stamped with the CI build's P4 CL).
+6. Feed cook/package durations into the dashboard. ✅ **DONE 2026-06-04** (`8cb39c6` — dashboard Track-4/Unreal panel ingests `unreal/.metrics`).
 
 ## Prerequisites
 
@@ -96,6 +96,6 @@ pwsh -File unreal/scripts/check-prereqs.ps1
   **72.9 s** incremental (editor up-to-date, warm-DDC cook, content re-paked + archived). The real
   run surfaced the `Win64`→`Windows` rename a *third* time — the BuildGraph `<Cook>` task is literal
   where `BuildCookRun` is forgiving (lesson #4). This is the bridge from three scripts to one pipeline
-  TeamCity can drive. Next: **rung #5** run the graph from **TeamCity**, **version-stamping the
-  package with the P4 changelist** (the track's headline artifact) → **rung #6** dashboard ingests
+  TeamCity can drive. ✅ **rung #5 DONE** (`923f0d3`) — the graph runs from **TeamCity**, version-stamping the
+  package with the P4 changelist (the track's headline artifact); ✅ **rung #6 DONE** (`8cb39c6`) — the dashboard ingests
   the `.metrics` cook/package durations.

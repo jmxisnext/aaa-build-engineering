@@ -30,7 +30,7 @@ param(
     [string]$ProxyPort = "localhost:1668",
     [string]$DepotPath = "//game/main/...",
     [int]   $SeedMB    = 0,
-    [string]$ProxyDir  = "J:\jammers-lab\aaa-build-engineering\perforce\proxy",
+    [string]$ProxyDir  = $PSScriptRoot,
     [string]$CacheDir  = "C:\PerforceSandbox\proxy\cache"
 )
 

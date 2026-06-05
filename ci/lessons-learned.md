@@ -1,8 +1,8 @@
 # CI lessons learned (Track 2)
 
 Real-world gotchas hit during the TeamCity + P4-broker bring-up. Same pattern
-as `perforce/lessons-learned.md` — each entry is the kind of thing an
-interviewer might phrase as *"tell me about a time you got bitten by CI."*
+as `perforce/lessons-learned.md` — each entry is a war story worth keeping: what
+bit, why a build engineer cares, and the fix.
 
 Entries are appended as they happen, not batched at the end of the track.
 
@@ -49,7 +49,7 @@ so you can authorize it in the same browser session.
    propagates non-zero exit to `docker compose up`, which trips CI scripts
    that assume "up means good."
 
-**Interview-ready bullet:** *"Healthchecks fail closed by design — if your
+**Takeaway:** *"Healthchecks fail closed by design — if your
 healthcheck uses a tool that isn't in the image, the container reports
 unhealthy forever and anything depending on it via `service_healthy` blocks.
 Validate the probe command via `docker exec` before trusting it."*
@@ -115,7 +115,7 @@ Skipping #2 means the first real build to land on a fresh agent breaks at
 sync, which looks like a flaky build and gets attributed to "Perforce being
 weird" instead of the real issue (missing tool).
 
-**Interview-ready bullet:** *"TeamCity's Perforce plugin runs the
+**Takeaway:** *"TeamCity's Perforce plugin runs the
 server-side Java client for VCS polling and connection testing, but the
 agent shells out to an external `p4` binary for actual sync. The two are
 different code paths — a green Test Connection guarantees the server can
@@ -178,7 +178,7 @@ rejected) shows up in `broker.log` for audit.
    not by telling people to bypass. The fact that the right fix lives in
    broker config makes it durable across operators and shifts.
 
-**Interview-ready bullet:** *"The broker is a connection-time router, not
+**Takeaway:** *"The broker is a connection-time router, not
 a journal — anything that bypasses it (e.g. submitting directly to p4d
 on the alternate port) succeeds at the depot level but vanishes from
 broker logs. That's fine as a one-off bootstrap move, but it argues for
@@ -246,7 +246,7 @@ function Set-ArtifactRules {
    so the script always converges to a clean state. Convergence > clever
    patching.
 
-**Interview-ready bullet:** *"TeamCity's REST API does per-endpoint
+**Takeaway:** *"TeamCity's REST API does per-endpoint
 content negotiation — most endpoints serve JSON but a few (like
 `/settings/artifactRules`) serve `text/plain` and reject a JSON Accept
 with 406. Build the REST helper to accept per-call Accept from the start,
@@ -315,7 +315,7 @@ agent needs its own conf mount (`./data/teamcity_agent` vs
 `./data/teamcity_agent2`) and its own `AGENT_NAME`. Everything else
 (image, server URL, broker route) is identical.
 
-**Interview-ready bullet:** *"A second build agent sped our leaf stage up
+**Takeaway:** *"A second build agent sped our leaf stage up
 exactly 2× because the chain is 2-wide there — Smoke Test and Cook Data
 both depend only on Compile. The lesson is that agent-pool sizing tracks
 the width of your build graph: a third agent would've done nothing for
@@ -367,7 +367,7 @@ read from a log that outlives the restart, and (b) security controls
 outage that's misdiagnosed as "server slow to boot." Both are classic
 "works the first time, mysteriously fails on the automated retry" CI bugs.
 
-**Interview-ready bullet:** *"TeamCity's superuser token rotates per
+**Takeaway:** *"TeamCity's superuser token rotates per
 server process and is logged repeatedly into a volume-persisted log, so a
 scrape right after restart can grab a stale token from a prior boot — take
 the last occurrence, after init completes. And don't tight-loop auth while
@@ -435,7 +435,7 @@ security control; automation that provisions tokens must plan for it
 (bootstrap-password, or mint out-of-band and inject), not assume admin can do
 everything.
 
-**Interview-ready bullet:** *"To get instant CI from Perforce I used a p4d
+**Takeaway:** *"To get instant CI from Perforce I used a p4d
 change-commit trigger that pings TeamCity's commit-hook endpoint. Three gotchas,
 all in the auth/topology seam: authenticate the hook with a durable minted token,
 never the superuser token that rotates each restart; skip the vendor's auto-detect
@@ -487,7 +487,7 @@ recover — anything else lets a manual, undocumented dependency masquerade as a
 And when you *do* script a config object, read the live one back and diff it; the
 shape that's actually stored beats the shape the docs (or your memory) claim.
 
-**Interview-ready bullet:** *"Our CI bootstrap looked idempotent but had never been run
+**Takeaway:** *"Our CI bootstrap looked idempotent but had never been run
 against an empty database — it attached a VCS root and referenced a project that nothing
 created; both had been made by hand in the UI and just survived restarts. I scripted the
 project and root creation, and verified the exact REST body with a non-destructive
@@ -526,7 +526,7 @@ no reset script — it manufactures false confidence that disaster recovery work
 bind-mount vs named-volume is precisely the infra detail that decides whether `down -v`
 is a clean slate or a no-op; know which your stack uses before you stake a recovery on it.
 
-**Interview-ready bullet:** *"Our compose stack claimed to be `down -v` reset-able, but
+**Takeaway:** *"Our compose stack claimed to be `down -v` reset-able, but
 all its state was a host bind mount — and `-v` only removes Docker-managed volumes, so the
 database survived and the 'reset' was a no-op that just re-skipped everything. I made the
 two real reset paths explicit — a config-level project delete that re-runs the bootstrap,
@@ -586,7 +586,7 @@ the missing-create bug.) When a vendor enables a security control across a versi
 every scripted write is a candidate breakage — and CSRF tokens being per-session means a
 multi-identity provisioning script needs one token per identity, not one global token.
 
-**Interview-ready bullet:** *"After a TeamCity bump our CI bootstrap 403'd on the first POST
+**Takeaway:** *"After a TeamCity bump our CI bootstrap 403'd on the first POST
 with a CSRF error — latent for months because re-runs against a populated server only did
 GETs, and CSRF only guards writes. Fix was a web session plus an X-TC-CSRF-Token header from
 /authenticationTest.html?csrf on every mutating call. The subtlety: the token is per session,
@@ -617,7 +617,7 @@ syntax that uses the same metacharacter. The tell is "my literal `%`/`$` vanishe
 into junk." Know your CI's escape (`%%` here) and reach for it whenever a script step mixes
 date formats, `printf`, or awk with the CI's own variable syntax.
 
-**Interview-ready bullet:** *"A version-stamp step's `date +%Y` came out mangled because
+**Takeaway:** *"A version-stamp step's `date +%Y` came out mangled because
 TeamCity substitutes `%…%` parameters in the script before the shell runs — `%Y` looked like
 a half-open parameter ref. The fix is doubling: `%%Y`, which TeamCity collapses to a literal
 `%`. Generalizes to any CI that templates your scripts with a metacharacter your shell also
@@ -648,7 +648,7 @@ assume the dir started empty. Glob artifact/output rules are where this bites: t
 which files this build produced vs. which were lying around. Either clean before you build, or
 make the publish rule specific enough that yesterday's output can't match it.
 
-**Interview-ready bullet:** *"Stamping the changelist into the tarball name surfaced a latent
+**Takeaway:** *"Stamping the changelist into the tarball name surfaced a latent
 bug: the agent reuses its checkout dir, so a glob artifact rule swept up a previous build's
 tarball and published two. Fix was rm-ing stale tarballs in the step (and/or a per-CL exact
 artifact rule). The general lesson: CI reuses work dirs, so a step that emits files can't
@@ -694,7 +694,7 @@ on one line (or use splatting with the splat built on its own complete lines); r
 multi-line backtick/`\` continuations for real script files you invoke. And treat a green build
 with the wrong artifact as a first-class failure: assert on the *output*, not just the exit code.
 
-**Interview-ready bullet:** *"A TeamCity PowerShell step ran green but emitted a stale artifact —
+**Takeaway:** *"A TeamCity PowerShell step ran green but emitted a stale artifact —
 the version-stamp command never executed. The tell: the step's log printed the line *before* it,
 then 'Process exited with code 0'. The only difference from the command that worked was a
 backtick line-continuation; the CI runner didn't preserve it across the newline and silently
@@ -742,7 +742,7 @@ not just that the tool is on PATH. And know that satisfying a build's *requireme
 schedules) is not the same as the runner being able to *launch* the tool — faking the capability
 parameter gets you a scheduled build that fails at launch.
 
-**Interview-ready bullet:** *"A native Windows TeamCity agent ran builds but couldn't run a
+**Takeaway:** *"A native Windows TeamCity agent ran builds but couldn't run a
 PowerShell-Core step — 'could not select PowerShell.' Root cause: pwsh was a Microsoft Store
 install, which doesn't write the HKLM PowerShellCore registry key the TeamCity detector reads, so
 the agent only advertised Windows PowerShell 5.1. Installing the pwsh MSI (registry + standard

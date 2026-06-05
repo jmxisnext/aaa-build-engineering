@@ -625,7 +625,7 @@ moment you add a broker, a proxy, or a container boundary (i.e. any real studio
 topology), the auto-detect's matching key stops matching and it fails *quietly*,
 notifying nothing rather than erroring.
 
-**Interview-ready bullet:** *"For instant CI from Perforce I used a p4d
+**Takeaway:** *"For instant CI from Perforce I used a p4d
 change-commit trigger that pings TeamCity's commit-hook endpoint. Two gotchas:
 authenticate it with a durable minted token, not the superuser token that
 rotates each restart; and skip the vendor's auto-detect endpoint that matches

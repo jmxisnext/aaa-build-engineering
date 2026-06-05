@@ -29,7 +29,7 @@ param(
     [string]$P4          = "C:\Program Files\Perforce\p4.exe",
     [int]   $ThresholdMB = 5,
     [int]   $TestFileMB  = 6,
-    [string]$ScriptsDir  = "J:\jammers-lab\aaa-build-engineering\perforce\scripts"
+    [string]$ScriptsDir  = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\scripts'))
 )
 
 $ErrorActionPreference = "Stop"

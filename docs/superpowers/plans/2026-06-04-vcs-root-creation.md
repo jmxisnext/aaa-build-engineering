@@ -515,7 +515,7 @@ recover — anything else lets a manual, undocumented dependency masquerade as a
 And when you *do* script a config object, read the live one back and diff it; the
 shape that's actually stored beats the shape the docs (or your memory) claim.
 
-**Interview-ready bullet:** *"Our CI bootstrap looked idempotent but had never been run
+**Takeaway:** *"Our CI bootstrap looked idempotent but had never been run
 against an empty database — it attached a VCS root and referenced a project that nothing
 created; both had been made by hand in the UI and just survived restarts. I scripted the
 project and root creation, and verified the exact REST body with a non-destructive
