@@ -1,22 +1,26 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 4cf1664 - feat(track4): rung #3 package - package-lyra.ps1 + runnable 1.72GB Lyra build
+Branch: main   |   Last commit: 7f2dda1 - feat(track4): rung #4 BuildGraph - lyra-pipeline.xml runs compile->cook->package end-to-end
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, and `unreal/.metrics/` are gitignored. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **18 commits are ahead of `origin/main` (incl. this handoff) - all unpushed. Push them.**
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, and `unreal/.metrics/` are gitignored. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **20 commits are ahead of `origin/main` (incl. this handoff) - all unpushed. Push them.**
 
-## What was just built (2026-06-04, session 2 - the compile->cook->package ladder, rungs #1-#3)
-The Track 4 compile -> cook -> package pipeline is **green end-to-end with real, timed artifacts.** Each rung has a wrapper script (timed, tee log to `.logs`, metric JSON to `.metrics`) sharing `_unreal-common.ps1` discovery.
-- 4cf1664 **Rung #3 package** - `package-lyra.ps1` (`BuildCookRun -build -skipcook -stage -pak -archive`). Builds the **LyraGame** target (rung #1 built only the editor; a runnable package needs the game `.exe`), reuses the cook, paks to IoStore, archives to **`D:\LyraPackaged`**. **90.5 s** -> runnable **1.72 GB** build: `LyraGame.exe` (336.8 MB) + `pakchunk0-Windows.ucas` (485.9 MB) + content paks.
-- fa39c68 **Rung #2 cook** - `cook-lyra.ps1` (`BuildCookRun -cook -skipstage`). Cold Win64 cook **1432 s (~23.9 min)**, 15,317 shaders, 1.8 GB to `Saved\Cooked\Windows`. Lesson #4 (Win64->Windows folder rename; `UE-LocalDataCachePath` redirects only the Local DDC node).
-- d97975e **Rung #1 compile + baseline** - pagefile validated (commit 31->95 GB, UBA-on zero OOM, lesson #1 closed). Cold compile (423 actions, MPA=8): **UBA off 83.9 s vs on 108.4 s** -> UBA ~29% slower single-box (lesson #3). `-Clean` was clean-only (lesson #2) -> now clears Intermediate+Binaries project-wide.
-- **End-to-end cold pipeline (clean -> packaged): ~27 min** (compile 84 s + cook 24 min + package 90 s).
+## What was just built (2026-06-04, session 2 - Track 4 rungs #1-#4, the pipeline is DECLARATIVE)
+Compile -> cook -> package, then expressed as **one BuildGraph** - the bridge to CI. Each rung has a timed wrapper (tee log to `.logs`, metric JSON to `.metrics`) sharing `_unreal-common.ps1`.
+- 7f2dda1 **Rung #4 BuildGraph** - `buildgraph/lyra-pipeline.xml` (`Compile Lyra Editor` -> `Cook Lyra` -> `Package Lyra`, aggregate `Lyra Pipeline`) via `buildgraph-lyra.ps1` (`-ListOnly` validates, real run executes). End-to-end **72.9 s** incremental. Surfaced the `Win64`->`Windows` rename a 3rd time (BuildGraph `<Cook>` is literal where `BuildCookRun` maps it - lesson #4); fixed via a `CookPlatform` option.
+- 4cf1664 **Rung #3 package** - `package-lyra.ps1`, runnable **1.72 GB** build -> `D:\LyraPackaged` (90.5 s, reuses cook).
+- fa39c68 **Rung #2 cook** - `cook-lyra.ps1`, cold cook **23.9 min / 15,317 shaders / 1.8 GB** (lesson #4 DDC + folder rename).
+- d97975e **Rung #1 compile + baseline** - pagefile validated (lesson #1 closed), cold compile **UBA off 83.9 s vs on 108.4 s** (UBA slower single-box, lesson #3), `-Clean` made truly cold (lesson #2).
+- **Cold pipeline ~27 min**; warm/incremental via BuildGraph **~73 s**.
 
 ## Live edge
-On disk now: compiled `LyraEditor` + `LyraGame` (`G:\...\Binaries\Win64`), cooked content (`Saved\Cooked\Windows`, 1.8 GB), and a **runnable packaged build at `D:\LyraPackaged\Windows`** (128 files, 1.72 GB; `LyraGame.exe` not yet smoke-launched - that's a manual double-click check). DDC across `D:\UE-DDC` (0.43 GB) + project DDC on G: (1.12 GB). The three command-line rungs are demoable; what's left is wiring them into CI.
+The full pipeline is green standalone AND as a declarative BuildGraph that runs end-to-end. On disk: compiled editor + game, cooked content, runnable packaged build at `D:\LyraPackaged\Windows`. Lessons #1-#4 captured. **What's left is wiring the BuildGraph into CI + the version-stamp** - that's infra-heavy and partly manual.
 
 ## Next
-**Rung #4: author the pipeline as a BuildGraph `.xml`** (`RunUAT BuildGraph -Script=... -Target=...`). Wrap the three rungs as BuildGraph nodes (Compile -> Cook -> Package) with the cooked/staged dirs as shared outputs. Validate by running it locally (`-ListOnly` first to print the graph, then a real run). This is the bridge from "three scripts" to "one declarative pipeline CI can run."
-Then: **rung #5** run the BuildGraph from **TeamCity**, and **version-stamp the package with the P4 changelist** (the track's headline artifact, extends the Track-2 version-stamp). **rung #6** dashboard ingests the `.metrics` cook/package durations. These need infra up:
-- CI/P4: `docker compose -f ci/docker-compose.yml up -d` + `perforce/scripts/start-p4d.ps1` + `perforce/broker/start-broker.ps1` (note SEEDS: `bench-agents.ps1` + REST scripts may have the TeamCity 2026.x CSRF-on-writes bug - patch before relying on them).
-*Optional cheap measurement:* re-run `cook-lyra.ps1` now (warm DDC) for the cold-24min vs warm-cook DDC-value story.
+**Rung #5: run the BuildGraph from TeamCity + version-stamp the package with the P4 changelist** (the track's HEADLINE demoable artifact - "BuildGraph executed from CI emitting a CL-stamped package"). Bigger, infra-dependent, possibly interactive:
+1. **Bring infra up:** `docker compose -f ci/docker-compose.yml up -d` (TeamCity server+agents) + `perforce/scripts/start-p4d.ps1` + `perforce/broker/start-broker.ps1`.
+2. **Heads-up (SEEDS):** TeamCity sandbox pins `:latest` (drifted to 2026.x). The REST scripts (`bootstrap-builds.ps1`, `setup-vcs-trigger.ps1` were fixed; **`bench-agents.ps1` still has the latent CSRF-on-writes bug** - patch before relying on it). TeamCity first-run (admin account, **agent authorization**) is not fully scripted - expect a manual step or two.
+3. **TeamCity build config** that runs `buildgraph-lyra.ps1` (or `RunUAT BuildGraph` directly) on an agent that has UE 5.6 + VS2022 (the agent image needs the MSVC/UE toolchain - cf. the `ci/agent/` Dockerfile-grows-over-time seed).
+4. **Version-stamp:** thread the P4 CL into the package (extends the Track-2 version-stamp pattern). The cook log already shows `buildversion=...-CL-44394996` (engine CL) - stamp with the *content* depot CL.
+Then **rung #6:** dashboard ingests the `.metrics` cook/package/buildgraph durations.
+- *Optional cheap measurement first:* re-run `cook-lyra.ps1` (warm DDC) for the cold-24min vs warm-cook DDC-value story.
