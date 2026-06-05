@@ -1,9 +1,9 @@
 # dashboard/ — Track 4: build-pipeline observability
 
 **Goal:** one self-contained `dashboard.html` that shows the whole pipeline at a
-glance — the three finished tracks (CI, accel, perforce) on a single page,
-built from a committed real snapshot, that **opens offline and demos any time**.
-No server, no build step at view time, no external requests.
+glance — all four tracks (CI, accel, perforce, and the Unreal/Lyra pipeline) on a
+single page, built from a committed real snapshot, that **opens offline and demos
+any time**. No server, no build step at view time, no external requests.
 
 This is the capstone view for the repo: it doesn't add a new build capability,
 it *aggregates* the ones the earlier tracks proved and makes them legible in
@@ -12,9 +12,10 @@ one screen — the "here's the pipeline I built" artifact you point an interview
 ## The pipeline
 
 ```
-  TeamCity REST ─┐
-  bench -Json   ─┼─►  collect-metrics.ps1  ─►  data/snapshot.json  ─►  build-dashboard.ps1  ─►  dashboard.html
-  p4 streams    ─┘     (gather + normalize)      (committed state)        (render, no JS)        (committed artifact)
+  TeamCity REST   ─┐
+  bench -Json      │
+  p4 streams       ┼─►  collect-metrics.ps1  ─►  data/snapshot.json  ─►  build-dashboard.ps1  ─►  dashboard.html
+  unreal/.metrics ─┘     (gather + normalize)      (committed state)        (render, no JS)        (committed artifact)
 ```
 
 Two stages, deliberately split so the *capture* (needs infra) is separate from
@@ -33,7 +34,7 @@ Both `snapshot.json` and `dashboard.html` are committed as the demo state.
 
 | Path | What |
 |---|---|
-| `scripts/collect-metrics.ps1` | Gathers the three feeds (CI: TeamCity REST · accel: `bench -Json` emits · perforce: live `p4`) into `data/snapshot.json`, with per-feed stale-fallback. Pure transforms (`ConvertFrom-TcBuilds`, `ConvertFrom-P4Streams`, `Get-AccelFeed`, `Merge-Feed`) are unit-tested. |
+| `scripts/collect-metrics.ps1` | Gathers the four feeds (CI: TeamCity REST · accel: `bench -Json` emits · perforce: live `p4` · unreal: the Track-4 wrappers' `unreal/.metrics` emits) into `data/snapshot.json`, with per-feed stale-fallback. Pure transforms (`ConvertFrom-TcBuilds`, `ConvertFrom-P4Streams`, `Get-AccelFeed`, `ConvertFrom-UnrealMetrics`, `Merge-Feed`) are unit-tested. |
 | `scripts/build-dashboard.ps1` | Renders a snapshot into a single self-contained `dashboard.html`. Inline SVG helpers (`New-SvgTimeline`, `New-SvgBars`, `New-DurationBars`) + `Get-DashboardHtml`. Deterministic. |
 | `scripts/seed-build-history.ps1` | Operational: brings TeamCity up, bootstraps the AAASandbox chain, and drives `-Builds` real changelist/chain runs so the CI panel has a real trend. Re-uses `ci/scripts` wholesale. `-DryRun` prints the plan without touching infra. |
 | `data/snapshot.fixture.json` | Small deterministic fixture exercising every render path (green + red CI builds across changelists, all accel sub-sections, the perforce panel). Drives the render tests. |
@@ -85,5 +86,7 @@ pwsh -File .\dashboard\scripts\build-dashboard.ps1
   is one file that opens offline. ASCII output (Unicode glyphs are HTML entities),
   so no encoding surprises across machines.
 - **Provenance.** Every number traces to its source: CI → TeamCity REST, accel →
-  the `bench -Json` emit that produced it, perforce → live `p4 streams`/`depots`.
+  the `bench -Json` emit that produced it, perforce → live `p4 streams`/`depots`,
+  unreal → the Track-4 wrappers' `.metrics` JSON (buildgraph/cook/package/stamp,
+  latest-per-step; the stamp's CL is the one a CI BuildGraph run wrote).
   Nothing on the page is hand-entered; re-running the pipeline regenerates it.

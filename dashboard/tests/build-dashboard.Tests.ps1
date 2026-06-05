@@ -35,6 +35,13 @@ Assert-Match 'hoops-brawl-cl44'                 $html 'renders a build statusTex
 Assert-Match 'row-fail|class=.fail'             $html 'failure build gets a fail style hook'
 Assert-Match '//game/main'                      $html 'renders the perforce stream graph'
 Assert-Match 'validate-submit'                  $html 'renders a perforce trigger'
+# ---- Track-4 unreal / Lyra pipeline panel ----
+Assert-Match 'Unreal / Lyra Pipeline'          $html 'has the Track-4 unreal panel'
+Assert-Match '44394996'                         $html 'renders the engine changelist (stamp provenance)'
+Assert-Match 'CL\s*51'                          $html 'renders the stamp changelist'
+Assert-Match '1432'                             $html 'renders the cook stage duration'
+Assert-Match '62\.2'                            $html 'renders the BuildGraph end-to-end duration'
+Assert-Match 'cold'                             $html 'has the cook cold-baseline note'
 # self-contained: no external script/style/CDN (xmlns + localhost build links are OK)
 Assert-NotMatch '<script'                       $html 'no <script> tags'
 Assert-NotMatch '<link\s'                       $html 'no <link> stylesheet refs'

@@ -115,6 +115,21 @@ function Get-DashboardHtml {
     }
     $proxyLine = if ($p.proxy) { "<p class='note'>p4p proxy: $($p.proxy.cachedMB) MB cached, client B upstream fetches = $($p.proxy.upstreamFetchesClientB)</p>" } else { "" }
 
+    # unreal / Lyra pipeline panel (Track 4)
+    $u = $Snapshot.unreal
+    $uStale = if ($u.stale) { " <span class='stale'>(stale)</span>" } else { "" }
+    $uStages = @($u.stages)
+    $uRows = foreach ($s in $uStages) {
+        $when = try { ([datetime]$s.utc).ToString('MM-dd HH:mm') } catch { ConvertTo-HtmlText $s.utc }
+        "<tr><td>$(ConvertTo-HtmlText $s.step)</td><td>$(ConvertTo-HtmlText $s.target)</td>" +
+        "<td class='num'>$([math]::Round([double]$s.durationSec,1))s</td><td>$when</td></tr>"
+    }
+    $bgStage = $uStages | Where-Object { $_.step -eq 'buildgraph' } | Select-Object -First 1
+    $uHead   = if ($bgStage) { "BuildGraph end-to-end (warm): <b>$([math]::Round([double]$bgStage.durationSec,1))s</b>" } else { "no BuildGraph run captured" }
+    $stamp   = $u.stamp
+    $uProv   = if ($stamp) { " &middot; stamp <b>CL $(ConvertTo-HtmlText $stamp.changelist)</b> ($(ConvertTo-HtmlText $stamp.changelistSource) &middot; via $(ConvertTo-HtmlText $stamp.source)) &middot; engine CL $(ConvertTo-HtmlText $stamp.engineChangelist)" } else { "" }
+    $uChip   = if ($stamp) { " &middot; unreal <b>CL $(ConvertTo-HtmlText $stamp.changelist)</b>$uStale" } else { "" }
+
     $gen = ConvertTo-HtmlText $Snapshot.generatedUtc
 
 @"
@@ -140,7 +155,7 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 </style></head>
 <body><div class='wrap'>
 <h1>AAA Build Pipeline &mdash; Observability</h1>
-<div class='chips'><b>$($builds.Count)</b> builds &middot; <b>$pct%</b> green &middot; <b>$clRange</b> &middot; accel <b>$([bool]$a.compile)</b> &middot; perforce$pStale</div>
+<div class='chips'><b>$($builds.Count)</b> builds &middot; <b>$pct%</b> green &middot; <b>$clRange</b> &middot; accel <b>$([bool]$a.compile)</b> &middot; perforce$pStale$uChip</div>
 
 <div class='panel'>
 <h2>CI Builds (Track 2)$ciStale</h2>
@@ -148,6 +163,14 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 <div class='svgbox'>$durBars</div>
 <table><thead><tr><th>config</th><th>#</th><th>CL</th><th>st</th><th>status</th><th>dur</th><th>when</th><th>url</th></tr></thead>
 <tbody>$($rows -join "`n")</tbody></table>
+</div>
+
+<div class='panel'>
+<h2>Unreal / Lyra Pipeline (Track 4)$uStale</h2>
+<div class='chips'>$uHead$uProv</div>
+<table><thead><tr><th>stage</th><th>target</th><th>dur</th><th>when</th></tr></thead>
+<tbody>$($uRows -join "`n")</tbody></table>
+<p class='note'>cook = cold-DDC baseline (one-time, full shader compile, ~24&nbsp;min); compile/package/BuildGraph are warm/incremental. BuildGraph runs compile&rarr;cook&rarr;package as one graph; stamp writes the CL provenance into the package + a CL-named sidecar.</p>
 </div>
 
 <div class='cols'>
@@ -166,7 +189,7 @@ $proxyLine
 </div>
 </div>
 
-<footer>generated $gen &middot; CI &rarr; TeamCity REST &middot; accel &rarr; bench -Json &middot; perforce &rarr; p4 streams/triggers &middot; self-contained, no external requests</footer>
+<footer>generated $gen &middot; CI &rarr; TeamCity REST &middot; accel &rarr; bench -Json &middot; perforce &rarr; p4 streams/triggers &middot; unreal &rarr; .metrics &middot; self-contained, no external requests</footer>
 </div></body></html>
 "@
 }

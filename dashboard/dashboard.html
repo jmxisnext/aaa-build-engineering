@@ -20,7 +20,7 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 </style></head>
 <body><div class='wrap'>
 <h1>AAA Build Pipeline &mdash; Observability</h1>
-<div class='chips'><b>23</b> builds &middot; <b>96%</b> green &middot; <b>CL 46-51</b> &middot; accel <b>True</b> &middot; perforce</div>
+<div class='chips'><b>23</b> builds &middot; <b>96%</b> green &middot; <b>CL 46-51</b> &middot; accel <b>True</b> &middot; perforce &middot; unreal <b>CL 51</b></div>
 
 <div class='panel'>
 <h2>CI Builds (Track 2)</h2>
@@ -52,6 +52,17 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 <tr class='row-ok'><td>Compile</td><td class='num'>1</td><td class='num'>46</td><td>OK</td><td>Success</td><td class='num'>11s</td><td>06-04 17:04</td><td><a href='http://localhost:8111/buildConfiguration/AAASandbox_Compile/417'>build</a></td></tr></tbody></table>
 </div>
 
+<div class='panel'>
+<h2>Unreal / Lyra Pipeline (Track 4)</h2>
+<div class='chips'>BuildGraph end-to-end (warm): <b>62.2s</b> &middot; stamp <b>CL 51</b> (p4 &middot; via teamcity) &middot; engine CL 44394996</div>
+<table><thead><tr><th>stage</th><th>target</th><th>dur</th><th>when</th></tr></thead>
+<tbody><tr><td>compile</td><td>LyraEditor</td><td class='num'>83.9s</td><td>06-04 23:27</td></tr>
+<tr><td>cook</td><td>Lyra</td><td class='num'>1432s</td><td>06-05 00:11</td></tr>
+<tr><td>package</td><td>LyraGame</td><td class='num'>90.5s</td><td>06-05 00:19</td></tr>
+<tr><td>buildgraph</td><td>Lyra Pipeline</td><td class='num'>62.2s</td><td>06-05 02:32</td></tr></tbody></table>
+<p class='note'>cook = cold-DDC baseline (one-time, full shader compile, ~24&nbsp;min); compile/package/BuildGraph are warm/incremental. BuildGraph runs compile&rarr;cook&rarr;package as one graph; stamp writes the CL provenance into the package + a CL-named sidecar.</p>
+</div>
+
 <div class='cols'>
 <div class='panel'>
 <h2>Accel (Track 3)</h2>
@@ -68,5 +79,5 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 </div>
 </div>
 
-<footer>generated 06/04/2026 19:26:28 &middot; CI &rarr; TeamCity REST &middot; accel &rarr; bench -Json &middot; perforce &rarr; p4 streams/triggers &middot; self-contained, no external requests</footer>
+<footer>generated 06/05/2026 03:05:36 &middot; CI &rarr; TeamCity REST &middot; accel &rarr; bench -Json &middot; perforce &rarr; p4 streams/triggers &middot; unreal &rarr; .metrics &middot; self-contained, no external requests</footer>
 </div></body></html>

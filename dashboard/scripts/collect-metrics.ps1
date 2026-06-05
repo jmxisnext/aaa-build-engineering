@@ -12,7 +12,8 @@ param(
     [string]$Token,
     [string]$ProjectId = "AAASandbox",
     [int]   $Count     = 50,
-    [string]$MetricsDir = (Join-Path $PSScriptRoot "..\..\accel\.metrics"),
+    [string]$MetricsDir       = (Join-Path $PSScriptRoot "..\..\accel\.metrics"),
+    [string]$UnrealMetricsDir = (Join-Path $PSScriptRoot "..\..\unreal\.metrics"),
     [string]$Out        = (Join-Path $PSScriptRoot "..\data\snapshot.json")
 )
 $ErrorActionPreference = "Stop"
@@ -74,6 +75,40 @@ function Get-AccelFeed {
     [pscustomobject]$acc
 }
 
+function ConvertFrom-UnrealMetrics {
+    # Pure transform: parsed unreal/.metrics records -> the dashboard 'unreal' section.
+    # Latest-per-step (by utc) duration stages in pipeline order, plus the latest stamp's
+    # CL provenance. Only emits fields present in the metrics -- nothing fabricated.
+    param([object[]]$Metrics)
+    if (-not $Metrics) { return $null }
+    $order = 'compile','cook','package','buildgraph'
+    $stages = foreach ($step in $order) {
+        $latest = $Metrics |
+            Where-Object { $_.step -eq $step -and -not $_.listOnly } |   # skip list-only buildgraph dry-runs
+            Sort-Object { [datetime]$_.utc } | Select-Object -Last 1
+        if ($latest) {
+            [pscustomobject]@{ step = $latest.step; target = $latest.target; durationSec = $latest.durationSec; utc = $latest.utc }
+        }
+    }
+    $st = $Metrics | Where-Object { $_.step -eq 'stamp' } | Sort-Object { [datetime]$_.utc } | Select-Object -Last 1
+    $stamp = if ($st) {
+        [pscustomobject]@{ changelist = $st.changelist; changelistSource = $st.changelistSource
+            p4Changelist = $st.p4Changelist; engineChangelist = $st.engineChangelist; source = $st.source; utc = $st.utc }
+    } else { $null }
+    if (-not @($stages).Count -and -not $stamp) { return $null }
+    [pscustomobject]@{ stale = $false; stages = @($stages); stamp = $stamp }
+}
+
+function Get-UnrealFeed {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { return $null }
+    $metrics = foreach ($f in Get-ChildItem $Dir -Filter *.json -ErrorAction SilentlyContinue) {
+        try { Get-Content $f.FullName -Raw | ConvertFrom-Json } catch { }
+    }
+    if (-not $metrics) { return $null }
+    ConvertFrom-UnrealMetrics -Metrics @($metrics)
+}
+
 function Merge-Feed {
     param($New, $Prior)
     if ($null -ne $New) { return $New }
@@ -103,7 +138,7 @@ function Get-PerforceFeed {
 }
 
 function Invoke-Main {
-    param($BaseUrl, $Token, $ProjectId, $Count, $MetricsDir, $Out)
+    param($BaseUrl, $Token, $ProjectId, $Count, $MetricsDir, $UnrealMetricsDir, $Out)
     $prior = if (Test-Path $Out) { Get-Content $Out -Raw | ConvertFrom-Json } else { $null }
     if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
 
@@ -113,17 +148,19 @@ function Invoke-Main {
     $accel = Get-AccelFeed -Dir $MetricsDir
     $p4 = $null
     try { $p4 = Get-PerforceFeed } catch { Write-Warning "perforce feed: $($_.Exception.Message)" }
+    $unreal = Get-UnrealFeed -Dir $UnrealMetricsDir   # local files, no infra
 
     $snap = [ordered]@{
         generatedUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-        ci       = Merge-Feed -New $ci    -Prior $prior.ci
-        accel    = Merge-Feed -New $accel -Prior $prior.accel
-        perforce = Merge-Feed -New $p4    -Prior $prior.perforce
+        ci       = Merge-Feed -New $ci     -Prior $prior.ci
+        accel    = Merge-Feed -New $accel  -Prior $prior.accel
+        perforce = Merge-Feed -New $p4     -Prior $prior.perforce
+        unreal   = Merge-Feed -New $unreal -Prior $prior.unreal
     }
     $snap | ConvertTo-Json -Depth 8 | Set-Content -Path $Out -Encoding ascii
-    Write-Host "wrote $Out (ci stale=$($snap.ci.stale) accel=$([bool]$snap.accel) perforce stale=$($snap.perforce.stale))"
+    Write-Host "wrote $Out (ci stale=$($snap.ci.stale) accel=$([bool]$snap.accel) perforce stale=$($snap.perforce.stale) unreal stale=$($snap.unreal.stale))"
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    Invoke-Main -BaseUrl $BaseUrl -Token $Token -ProjectId $ProjectId -Count $Count -MetricsDir $MetricsDir -Out $Out
+    Invoke-Main -BaseUrl $BaseUrl -Token $Token -ProjectId $ProjectId -Count $Count -MetricsDir $MetricsDir -UnrealMetricsDir $UnrealMetricsDir -Out $Out
 }

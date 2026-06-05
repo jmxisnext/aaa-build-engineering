@@ -33,4 +33,29 @@ $merged = Merge-Feed -New $null -Prior $prior.ci
 Assert-True  $merged.stale            'fallback marks the section stale'
 Assert-Equal 3 @($merged.builds).Count 'fallback reuses prior builds'
 
+# ConvertFrom-UnrealMetrics: latest-per-step duration stages + stamp provenance
+$um = @(
+  [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=70.0;   success=$true; utc='2026-06-05T01:00:00Z' }
+  [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=62.2;   success=$true; utc='2026-06-05T02:32:49Z' }  # newer -> wins
+  [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=0.5; listOnly=$true; success=$true; utc='2026-06-05T03:00:00Z' }  # list-only -> ignored
+  [pscustomobject]@{ track='unreal'; step='compile';    target='LyraEditor';    durationSec=83.9;   success=$true; utc='2026-06-04T23:27:09Z' }
+  [pscustomobject]@{ track='unreal'; step='cook';       target='Lyra';          durationSec=1432.0; success=$true; utc='2026-06-05T00:11:51Z' }
+  [pscustomobject]@{ track='unreal'; step='package';    target='LyraGame';      durationSec=90.5;   success=$true; utc='2026-06-05T00:19:27Z' }
+  [pscustomobject]@{ track='unreal'; step='stamp'; changelist='51'; changelistSource='p4'; p4Changelist='51'; engineChangelist='44394996'; source='teamcity'; durationSec=0.02; success=$true; utc='2026-06-05T02:32:49Z' }
+)
+$uf = ConvertFrom-UnrealMetrics -Metrics $um
+Assert-Equal 4    @($uf.stages).Count                                'four duration stages (compile/cook/package/buildgraph)'
+$bg = @($uf.stages | Where-Object { $_.step -eq 'buildgraph' })
+Assert-Equal 1    $bg.Count                                          'one buildgraph stage (latest-per-step dedup)'
+Assert-Equal 62.2 $bg[0].durationSec                                 'keeps the NEWEST non-list-only buildgraph run'
+Assert-Equal '51' $uf.stamp.changelist                              'extracts the stamp changelist'
+Assert-Equal 'teamcity' $uf.stamp.source                            'extracts the stamp source'
+Assert-Equal '44394996' $uf.stamp.engineChangelist                 'extracts the engine changelist'
+
+# Merge-Feed stale-fallback applies to the unreal section too
+$priorU = [pscustomobject]@{ stale=$false; stages=@(1,2,3,4); stamp=[pscustomobject]@{ changelist='44' } }
+$mU = Merge-Feed -New $null -Prior $priorU
+Assert-True  $mU.stale                  'unreal fallback marks stale'
+Assert-Equal '44' $mU.stamp.changelist  'unreal fallback reuses the prior stamp'
+
 Assert-Summary

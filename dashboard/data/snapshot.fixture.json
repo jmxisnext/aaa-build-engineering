@@ -31,5 +31,15 @@
       {"name":"validate-submit","type":"change-content","desc":"depot-hygiene content validation"}
     ],
     "proxy": {"cachedMB":50,"upstreamFetchesClientB":0}
+  },
+  "unreal": {
+    "stale": false,
+    "stages": [
+      {"step":"compile","target":"LyraEditor","durationSec":83.9,"utc":"2026-06-04T23:27:09Z"},
+      {"step":"cook","target":"Lyra","durationSec":1432.0,"utc":"2026-06-05T00:11:51Z"},
+      {"step":"package","target":"LyraGame","durationSec":90.5,"utc":"2026-06-05T00:19:27Z"},
+      {"step":"buildgraph","target":"Lyra Pipeline","durationSec":62.2,"utc":"2026-06-05T02:32:49Z"}
+    ],
+    "stamp": {"changelist":"51","changelistSource":"p4","p4Changelist":"51","engineChangelist":"44394996","source":"teamcity","utc":"2026-06-05T02:32:49Z"}
   }
 }
