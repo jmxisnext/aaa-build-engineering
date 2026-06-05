@@ -159,8 +159,11 @@ Write-Host "== BuildGraph (compile -> cook -> package) =="
 pwsh -File unreal/scripts/buildgraph-lyra.ps1
 if ($LASTEXITCODE -ne 0) { Write-Host "BuildGraph failed ($LASTEXITCODE)"; exit $LASTEXITCODE }
 Write-Host "== Version-stamp the package with the P4 changelist =="
-pwsh -File unreal/scripts/stamp-lyra-package.ps1 `
-  -Changelist '%build.vcs.number%' -BuildNumber '%build.number%' -BuildId '%teamcity.build.id%' -Source teamcity
+# One line, no backtick continuation: in TeamCity's PowerShell step the multi-line
+# backtick-continued invocation silently did not execute (the step exited 0 right after
+# the header above, stamp never ran). The single-line BuildGraph call worked. Keep CI
+# inline-step commands on one line. See ci/lessons-learned.md #13.
+pwsh -File unreal/scripts/stamp-lyra-package.ps1 -Changelist '%build.vcs.number%' -BuildNumber '%build.number%' -BuildId '%teamcity.build.id%' -Source teamcity
 exit $LASTEXITCODE
 '@
 

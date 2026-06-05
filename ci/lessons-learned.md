@@ -654,4 +654,101 @@ tarball and published two. Fix was rm-ing stale tarballs in the step (and/or a p
 artifact rule). The general lesson: CI reuses work dirs, so a step that emits files can't
 assume an empty directory, and glob publish rules will grab whatever's left over."*
 
+## 13. A backtick line-continuation in a TeamCity PowerShell step silently skipped the command
+
+**What happened:** Standing up the rung-#5 Lyra pipeline (`AAASandbox_LyraPipeline`), the build
+ran green but produced the *wrong* artifact: a stale `build-info.json` from a prior standalone
+stamp, not a fresh CI stamp. The single step runs two child processes:
+
+```powershell
+pwsh -File unreal/scripts/buildgraph-lyra.ps1            # ran fine (single line)
+...
+Write-Host "== Version-stamp the package with the P4 changelist =="
+pwsh -File unreal/scripts/stamp-lyra-package.ps1 `       # <-- backtick continuation
+  -Changelist '%build.vcs.number%' -BuildNumber '%build.number%' ... -Source teamcity
+exit $LASTEXITCODE
+```
+
+The build log showed the `== Version-stamp ==` header, then immediately `Process exited with
+code 0` — the stamp invocation never executed. The BuildGraph half (a single-line `pwsh -File`)
+worked; only the **backtick-continued** stamp call was skipped, and the build still went green
+(the skipped line meant nothing failed).
+
+**Root cause:** the only difference between the working call and the skipped one was the
+backtick line-continuation. Run the script directly on the host (verified) and the stamp works
+perfectly — so the script, the args, and the `%…%` substitutions were all correct. The fault is
+in how TeamCity's PowerShell runner assembles/executes the inline CODE across the line break:
+the continuation did not survive, so the statement (and its arguments) was dropped rather than
+erroring. A dropped statement is worse than a failing one — the build stays green and you only
+notice because the *output* is stale.
+
+**Fix:** put the invocation on a single line — no backtick continuation — exactly like the
+BuildGraph call that worked. Re-provisioned the config (`bootstrap-lyra.ps1 -Recreate`) and
+re-ran: the stamp executed, emitting `build-info.json` (p4_changelist 51, source teamcity,
+build id 627) and the `Lyra-Win64-Development-CL51.buildinfo.json` sidecar as artifacts.
+
+**Why a build engineer cares:** inline CI script steps are not your local shell — the CI tool
+templates and re-assembles the text before a shell ever sees it, and line-continuation
+characters are exactly the kind of thing that gets normalized away. Keep inline step commands
+on one line (or use splatting with the splat built on its own complete lines); reserve
+multi-line backtick/`\` continuations for real script files you invoke. And treat a green build
+with the wrong artifact as a first-class failure: assert on the *output*, not just the exit code.
+
+**Interview-ready bullet:** *"A TeamCity PowerShell step ran green but emitted a stale artifact —
+the version-stamp command never executed. The tell: the step's log printed the line *before* it,
+then 'Process exited with code 0'. The only difference from the command that worked was a
+backtick line-continuation; the CI runner didn't preserve it across the newline and silently
+dropped the statement. Fix: one line, no continuation. Lesson: inline CI steps are re-templated
+before the shell runs them, so line-continuations are fragile — and a green build with the wrong
+output is still a failure, so verify the artifact, not just the exit code."*
+
+## 14. A Microsoft Store pwsh is invisible to TeamCity's PowerShell detector — the Lyra agent couldn't select Core
+
+**What happened:** The Lyra pipeline must run on a **native Windows agent** (UE 5.6 + VS2022 on
+the host; the Linux compose agents can't build it). Stood one up by hand: downloaded the agent
+zip, dropped in a portable JRE (the distribution ships no JRE — `wrapper.java.command=java`
+expects one on the host), set `buildAgent.properties`, started it, authorized it via REST. The
+agent connected, synced P4, and ran builds — but the Lyra config reported **0 compatible
+agents**, and a forced run failed instantly with *"Could not select PowerShell for given bitness
+64-bit and version <Any>."* The agent's reported capabilities had `powershell_Desktop_5.1…` but
+**no `powershell_Core_*`** — it never detected pwsh 7, even though `pwsh` runs fine in a normal
+shell on the box.
+
+**Root cause:** pwsh 7 on this host was installed from the **Microsoft Store**
+(`C:\Program Files\WindowsApps\Microsoft.PowerShell_…\pwsh.exe`). The Store package does **not**
+create `HKLM\SOFTWARE\Microsoft\PowerShellCore\InstalledVersions`, and it lives under the
+ACL-locked `WindowsApps` directory — and that registry key is exactly what TeamCity's PowerShell
+detector reads to find Core. So the detector sees only Windows PowerShell 5.1 (Desktop). A
+detour: declaring `powershell_Core_*` agent parameters by hand in `buildAgent.properties`
+satisfied the *compatibility requirement* (the build scheduled) but **not** the runner's
+*executable selection* (which uses the detector's own discovered list) — so it still failed with
+"Could not select PowerShell." The requirement check and the tool selection are two different
+code paths.
+
+**Fix:** install PowerShell 7 the *normal* way (MSI → `C:\Program Files\PowerShell\7` + the HKLM
+key), restart the agent so the detector finds it; capability `powershell_Core_7.6.2_x64` then
+appears with `_Path = C:\Program Files\PowerShell\7`, the Lyra config gains a compatible agent,
+and the `edition=Core` step runs with the server config unchanged. (The MSI coexists with the
+Store package; winget refused at first — it treats the Store install as the same package ID, so
+the MSI must be installed directly/elevated.) Note the agent zip's missing JRE is a sibling
+gotcha: the modern `buildAgent.zip`/`buildAgentFull.zip` ship no runtime, so a host with no Java
+needs one dropped into `<agent>\jre` (which `findJava.bat` probes) before it will even start.
+
+**Why a build engineer cares:** "the tool works in my shell" says nothing about whether a CI
+agent's detector can find it — detectors key off registry/standard install paths, and modern app
+delivery (Microsoft Store, scoop, per-user, portable zips) deliberately sidesteps both. When
+onboarding a build agent, verify the agent's *reported capabilities* (the detected tool list),
+not just that the tool is on PATH. And know that satisfying a build's *requirement* (so it
+schedules) is not the same as the runner being able to *launch* the tool — faking the capability
+parameter gets you a scheduled build that fails at launch.
+
+**Interview-ready bullet:** *"A native Windows TeamCity agent ran builds but couldn't run a
+PowerShell-Core step — 'could not select PowerShell.' Root cause: pwsh was a Microsoft Store
+install, which doesn't write the HKLM PowerShellCore registry key the TeamCity detector reads, so
+the agent only advertised Windows PowerShell 5.1. Installing the pwsh MSI (registry + standard
+path) fixed detection. Two sub-lessons: the agent distribution ships no JRE so a Java-less host
+needs one staged into the agent's jre dir first; and hand-declaring the capability parameter
+satisfies the build *requirement* but not the runner's tool *selection* — those are separate code
+paths."*
+
 
