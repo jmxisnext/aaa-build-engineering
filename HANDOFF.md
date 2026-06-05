@@ -1,25 +1,27 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 923f0d3 - feat(track4): rung #5 capability - CL version-stamp + TeamCity Lyra config
+Branch: main   |   Last commit: 494189f - fix(track4): single-line stamp invocation in Lyra CI step
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, and `unreal/.metrics/` are gitignored. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **Push state corrected: only ~2 commits ahead of `origin/main` now (this handoff + 923f0d3). The prior handoff's "20 ahead" was stale - `origin/main` is at d819f04, so that work was already pushed.**
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **`494189f` is committed but NOT yet pushed** (origin/main is 1 behind). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, and `unreal/.metrics/` are gitignored.
 
-## What was just built (2026-06-04, session 3 - Track 4 rung #5 CAPABILITY half, infra-free)
-The headline-artifact pieces that need NO infra: a packaged Lyra build that self-reports the changelist that made it, plus the TeamCity config that runs the BuildGraph and emits it. The live CI run is the partly-manual follow-up.
-- 923f0d3 **Rung #5 capability** - two scripts, committed + verified:
-  - `unreal/scripts/stamp-lyra-package.ps1` - writes `build-info.json` INTO the package + a CL-named sidecar beside it (extends the Track-2 `build-info.json` provenance pattern to the Unreal package). **Tested 3 modes against the real 1.72 GB on-disk build** (`D:\LyraPackaged\Windows`): dry-run, standalone, TeamCity-mode. Carries Track-2 lesson #12 forward (cleans prior same-platform/config sidecars before writing, so a glob artifact rule can't double-publish). **Honest-provenance finding: Lyra is a launcher sample, NOT under P4 on this box** - so the "content depot CL" does not literally exist. The stamp records a REAL `engine_changelist` (44394996, from `Build.version`) AND a parameterizable `p4_changelist` (the live `%build.vcs.number%` from CI), each labeled by source - nothing fabricated. On-disk package left in honest standalone state (engine CL).
-  - `ci/scripts/bootstrap-lyra.ps1` - provisions `AAASandbox_LyraPipeline` via the CSRF-safe REST pattern (lesson #10): pwsh runner -> `buildgraph-lyra.ps1` then the stamp with `%build.vcs.number%`; **pinned to a WINDOWS agent** (`os.name contains Windows`); VCS root attached MANUAL-checkout (real P4 CL, no needless sync); artifacts publish the stamp. **`-DryRun` validated** (parses, correct REST) - NOT yet applied to a live server.
-- d819f04 **Parked seed** - factor the wrapper timing/log/metric spine into a shared `_unreal-common.ps1` helper (the stamp script repeats it once more; still inline, not promoted).
+## What was just built (2026-06-04, session 4 - rung #5 HEADLINE demo executed live + 3 bugs fixed)
+The session goal was "patch the bench-agents CSRF bug + pre-run verify," which expanded into running the full rung-#5 live demo end-to-end. **The headline artifact is now DONE via a real CI run**, not just authored:
+- **Live run achieved (no commit - it's a TeamCity build):** build #627 of `AAASandbox_LyraPipeline` ran the full BuildGraph (compile->cook->package Lyra) on a **native Windows agent**, then version-stamped the package with the **live P4 broker changelist (CL 51)** and published `build-info.json` + `Lyra-Win64-Development-CL51.buildinfo.json` as artifacts. `source=teamcity`, `p4_changelist=51`, `build_id=627`. That IS the rung-#5 headline: "BuildGraph executed from CI, emitting a Perforce-changelist-stamped Lyra package."
+- 494189f **Backtick bug fix** - the Lyra step's stamp invocation used a backtick line-continuation that TeamCity's PowerShell runner silently dropped (green build, STALE artifact). Collapsed to one line; re-ran green with correct output. Documents lessons #13 (backtick) + #14 (Store-pwsh detector miss) in `ci/lessons-learned.md`.
+- 17e13c2 **CSRF fix** (the original ask) - `bench-agents.ps1` was the 3rd write-path script missing the CSRF token; patched and **validated live** (bench-agents -Repeat 3 ran clean: leaf 23s->14s, chain 49s->36s, overlap invariant held). Addendum on lesson #10. *(Already pushed by the human.)*
+
+Three bugs surfaced + fixed during the live run: (1) bench-agents CSRF; (2) the backtick-continuation stamp skip; (3) **Store-installed pwsh invisible to TeamCity's PowerShell-Core detector** - the human installed the pwsh 7 MSI (registry + standard path) so the agent detects Core; the `edition=Core` config runs unchanged.
+
+## Infra state: FULLY TORN DOWN (cold)
+Everything is stopped and verified clear (docker daemon down, ports 1666/1667/8111 free, no p4d/broker, no agent java). The **native Windows agent install persists on disk at `C:\TeamCityAgent`** (console agent, runs as the human; portable Temurin 21 JRE at `C:\TeamCityAgent\jre` because the agent zip ships none). See auto-memory `native-windows-teamcity-agent`. Docker bind-mounted data under `ci/data/` persists, so a restart keeps the wizard/chain/Lyra config.
+
+**To bring it back up:** Docker Desktop -> `docker compose -f ci/docker-compose.yml up -d` -> `perforce/scripts/start-p4d.ps1` -> `perforce/broker/start-broker.ps1` -> start the agent (`agent.bat start` run from `C:\TeamCityAgent\bin`, cwd must be `bin`). The agent re-authorizes itself (identity persists in its conf).
 
 ## Live edge
-Rung #5 **capability is done + verified standalone**; the **CI config is authored + dry-run-validated but not applied to a live server**. The gating fact for the live run: Lyra needs a **native Windows TeamCity agent** (UE 5.6 + VS2022) - the Linux compose agents physically cannot build it. `bootstrap-lyra.ps1` already pins the Windows requirement. Nothing is running (no Docker, p4d, or broker - all cold).
+Rung #5 is **complete and demoed live**. Nothing is running (all cold). The only loose thread is the unpushed commit `494189f` - run `! git push origin main`.
 
 ## Next
-**The live infra run - rung #5 HEADLINE demo: "BuildGraph executed from CI, emitting a CL-stamped Lyra package."** In order:
-1. **Bring infra up:** start Docker Desktop, then `docker compose -f ci/docker-compose.yml up -d` (server + 2 Linux agents); `perforce/scripts/start-p4d.ps1`; `perforce/broker/start-broker.ps1`. (Compose pins `:latest`, drifted to 2026.x.)
-2. **TeamCity first-run wizard** (manual, not scripted): admin account + license. Then `ci/scripts/bootstrap-builds.ps1` if the C++ chain isn't present.
-3. **Install + authorize a native Windows TeamCity agent** on this host (it already has the engine `G:\UnrealEngine\UE_5.6`, VS2022, and the repo scripts). Agent zip at `<server>:8111/update/buildAgent.zip`; set `conf/buildAgent.properties` (serverUrl, name); start; **authorize** via UI or REST. This is the net-new, partly-scriptable piece.
-4. **Run `ci/scripts/bootstrap-lyra.ps1` for real** (drop `-DryRun`), then trigger `AAASandbox_LyraPipeline`. Watch BuildGraph (warm ~73 s) + stamp emit `build-info.json` + the CL-named sidecar as TeamCity artifacts. **That run IS the demo.**
-- **Heads-up (SEEDS, still open):** `bench-agents.ps1` still has the latent CSRF-on-writes bug - patch before relying on it.
-- *Then* rung #6: dashboard ingests the `.metrics` cook/package/buildgraph/stamp durations.
+1. **Push:** `! git push origin main` (gets `494189f` to origin).
+2. **Rung #6 - the metrics dashboard:** ingest the `.metrics` JSONs (cook/package/buildgraph/stamp durations from `unreal/.metrics/`, build chain timings) into a small dashboard. This is the next net-new *capability* (data -> visualization), and the stamp run already emits a metric JSON per the wrapper convention.
+- **Heads-up (open seed):** the native-agent bring-up (drop JRE, verify pwsh Core, write `buildAgent.properties`, start, authorize via REST) is currently all manual - worth scripting into `ci/scripts/setup-win-agent.ps1` for reproducibility before relying on it again.
