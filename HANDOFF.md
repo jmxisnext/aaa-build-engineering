@@ -1,26 +1,25 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 7f2dda1 - feat(track4): rung #4 BuildGraph - lyra-pipeline.xml runs compile->cook->package end-to-end
+Branch: main   |   Last commit: 923f0d3 - feat(track4): rung #5 capability - CL version-stamp + TeamCity Lyra config
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, and `unreal/.metrics/` are gitignored. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **20 commits are ahead of `origin/main` (incl. this handoff) - all unpushed. Push them.**
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer (matches the public release). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, and `unreal/.metrics/` are gitignored. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **Push state corrected: only ~2 commits ahead of `origin/main` now (this handoff + 923f0d3). The prior handoff's "20 ahead" was stale - `origin/main` is at d819f04, so that work was already pushed.**
 
-## What was just built (2026-06-04, session 2 - Track 4 rungs #1-#4, the pipeline is DECLARATIVE)
-Compile -> cook -> package, then expressed as **one BuildGraph** - the bridge to CI. Each rung has a timed wrapper (tee log to `.logs`, metric JSON to `.metrics`) sharing `_unreal-common.ps1`.
-- 7f2dda1 **Rung #4 BuildGraph** - `buildgraph/lyra-pipeline.xml` (`Compile Lyra Editor` -> `Cook Lyra` -> `Package Lyra`, aggregate `Lyra Pipeline`) via `buildgraph-lyra.ps1` (`-ListOnly` validates, real run executes). End-to-end **72.9 s** incremental. Surfaced the `Win64`->`Windows` rename a 3rd time (BuildGraph `<Cook>` is literal where `BuildCookRun` maps it - lesson #4); fixed via a `CookPlatform` option.
-- 4cf1664 **Rung #3 package** - `package-lyra.ps1`, runnable **1.72 GB** build -> `D:\LyraPackaged` (90.5 s, reuses cook).
-- fa39c68 **Rung #2 cook** - `cook-lyra.ps1`, cold cook **23.9 min / 15,317 shaders / 1.8 GB** (lesson #4 DDC + folder rename).
-- d97975e **Rung #1 compile + baseline** - pagefile validated (lesson #1 closed), cold compile **UBA off 83.9 s vs on 108.4 s** (UBA slower single-box, lesson #3), `-Clean` made truly cold (lesson #2).
-- **Cold pipeline ~27 min**; warm/incremental via BuildGraph **~73 s**.
+## What was just built (2026-06-04, session 3 - Track 4 rung #5 CAPABILITY half, infra-free)
+The headline-artifact pieces that need NO infra: a packaged Lyra build that self-reports the changelist that made it, plus the TeamCity config that runs the BuildGraph and emits it. The live CI run is the partly-manual follow-up.
+- 923f0d3 **Rung #5 capability** - two scripts, committed + verified:
+  - `unreal/scripts/stamp-lyra-package.ps1` - writes `build-info.json` INTO the package + a CL-named sidecar beside it (extends the Track-2 `build-info.json` provenance pattern to the Unreal package). **Tested 3 modes against the real 1.72 GB on-disk build** (`D:\LyraPackaged\Windows`): dry-run, standalone, TeamCity-mode. Carries Track-2 lesson #12 forward (cleans prior same-platform/config sidecars before writing, so a glob artifact rule can't double-publish). **Honest-provenance finding: Lyra is a launcher sample, NOT under P4 on this box** - so the "content depot CL" does not literally exist. The stamp records a REAL `engine_changelist` (44394996, from `Build.version`) AND a parameterizable `p4_changelist` (the live `%build.vcs.number%` from CI), each labeled by source - nothing fabricated. On-disk package left in honest standalone state (engine CL).
+  - `ci/scripts/bootstrap-lyra.ps1` - provisions `AAASandbox_LyraPipeline` via the CSRF-safe REST pattern (lesson #10): pwsh runner -> `buildgraph-lyra.ps1` then the stamp with `%build.vcs.number%`; **pinned to a WINDOWS agent** (`os.name contains Windows`); VCS root attached MANUAL-checkout (real P4 CL, no needless sync); artifacts publish the stamp. **`-DryRun` validated** (parses, correct REST) - NOT yet applied to a live server.
+- d819f04 **Parked seed** - factor the wrapper timing/log/metric spine into a shared `_unreal-common.ps1` helper (the stamp script repeats it once more; still inline, not promoted).
 
 ## Live edge
-The full pipeline is green standalone AND as a declarative BuildGraph that runs end-to-end. On disk: compiled editor + game, cooked content, runnable packaged build at `D:\LyraPackaged\Windows`. Lessons #1-#4 captured. **What's left is wiring the BuildGraph into CI + the version-stamp** - that's infra-heavy and partly manual.
+Rung #5 **capability is done + verified standalone**; the **CI config is authored + dry-run-validated but not applied to a live server**. The gating fact for the live run: Lyra needs a **native Windows TeamCity agent** (UE 5.6 + VS2022) - the Linux compose agents physically cannot build it. `bootstrap-lyra.ps1` already pins the Windows requirement. Nothing is running (no Docker, p4d, or broker - all cold).
 
 ## Next
-**Rung #5: run the BuildGraph from TeamCity + version-stamp the package with the P4 changelist** (the track's HEADLINE demoable artifact - "BuildGraph executed from CI emitting a CL-stamped package"). Bigger, infra-dependent, possibly interactive:
-1. **Bring infra up:** `docker compose -f ci/docker-compose.yml up -d` (TeamCity server+agents) + `perforce/scripts/start-p4d.ps1` + `perforce/broker/start-broker.ps1`.
-2. **Heads-up (SEEDS):** TeamCity sandbox pins `:latest` (drifted to 2026.x). The REST scripts (`bootstrap-builds.ps1`, `setup-vcs-trigger.ps1` were fixed; **`bench-agents.ps1` still has the latent CSRF-on-writes bug** - patch before relying on it). TeamCity first-run (admin account, **agent authorization**) is not fully scripted - expect a manual step or two.
-3. **TeamCity build config** that runs `buildgraph-lyra.ps1` (or `RunUAT BuildGraph` directly) on an agent that has UE 5.6 + VS2022 (the agent image needs the MSVC/UE toolchain - cf. the `ci/agent/` Dockerfile-grows-over-time seed).
-4. **Version-stamp:** thread the P4 CL into the package (extends the Track-2 version-stamp pattern). The cook log already shows `buildversion=...-CL-44394996` (engine CL) - stamp with the *content* depot CL.
-Then **rung #6:** dashboard ingests the `.metrics` cook/package/buildgraph durations.
-- *Optional cheap measurement first:* re-run `cook-lyra.ps1` (warm DDC) for the cold-24min vs warm-cook DDC-value story.
+**The live infra run - rung #5 HEADLINE demo: "BuildGraph executed from CI, emitting a CL-stamped Lyra package."** In order:
+1. **Bring infra up:** start Docker Desktop, then `docker compose -f ci/docker-compose.yml up -d` (server + 2 Linux agents); `perforce/scripts/start-p4d.ps1`; `perforce/broker/start-broker.ps1`. (Compose pins `:latest`, drifted to 2026.x.)
+2. **TeamCity first-run wizard** (manual, not scripted): admin account + license. Then `ci/scripts/bootstrap-builds.ps1` if the C++ chain isn't present.
+3. **Install + authorize a native Windows TeamCity agent** on this host (it already has the engine `G:\UnrealEngine\UE_5.6`, VS2022, and the repo scripts). Agent zip at `<server>:8111/update/buildAgent.zip`; set `conf/buildAgent.properties` (serverUrl, name); start; **authorize** via UI or REST. This is the net-new, partly-scriptable piece.
+4. **Run `ci/scripts/bootstrap-lyra.ps1` for real** (drop `-DryRun`), then trigger `AAASandbox_LyraPipeline`. Watch BuildGraph (warm ~73 s) + stamp emit `build-info.json` + the CL-named sidecar as TeamCity artifacts. **That run IS the demo.**
+- **Heads-up (SEEDS, still open):** `bench-agents.ps1` still has the latent CSRF-on-writes bug - patch before relying on it.
+- *Then* rung #6: dashboard ingests the `.metrics` cook/package/buildgraph/stamp durations.
