@@ -1,27 +1,22 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 494189f - fix(track4): single-line stamp invocation in Lyra CI step
+Branch: main   |   Last commit: 8cb39c6 - feat(track4): dashboard Track-4 (Unreal/Lyra) panel - ingest unreal/.metrics
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **`494189f` is committed but NOT yet pushed** (origin/main is 1 behind). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, and `unreal/.metrics/` are gitignored.
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. No co-author trailer. `git push` is permission-blocked for the agent - the human runs `! git push origin main`. **main is ~4 ahead of origin/main** (494189f stamp fix, 69e68ca prior closeout, 8cb39c6 dashboard panel, + this closeout) - push when ready. `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, `unreal/.metrics/`, `dashboard/_preview.html` are gitignored.
 
-## What was just built (2026-06-04, session 4 - rung #5 HEADLINE demo executed live + 3 bugs fixed)
-The session goal was "patch the bench-agents CSRF bug + pre-run verify," which expanded into running the full rung-#5 live demo end-to-end. **The headline artifact is now DONE via a real CI run**, not just authored:
-- **Live run achieved (no commit - it's a TeamCity build):** build #627 of `AAASandbox_LyraPipeline` ran the full BuildGraph (compile->cook->package Lyra) on a **native Windows agent**, then version-stamped the package with the **live P4 broker changelist (CL 51)** and published `build-info.json` + `Lyra-Win64-Development-CL51.buildinfo.json` as artifacts. `source=teamcity`, `p4_changelist=51`, `build_id=627`. That IS the rung-#5 headline: "BuildGraph executed from CI, emitting a Perforce-changelist-stamped Lyra package."
-- 494189f **Backtick bug fix** - the Lyra step's stamp invocation used a backtick line-continuation that TeamCity's PowerShell runner silently dropped (green build, STALE artifact). Collapsed to one line; re-ran green with correct output. Documents lessons #13 (backtick) + #14 (Store-pwsh detector miss) in `ci/lessons-learned.md`.
-- 17e13c2 **CSRF fix** (the original ask) - `bench-agents.ps1` was the 3rd write-path script missing the CSRF token; patched and **validated live** (bench-agents -Repeat 3 ran clean: leaf 23s->14s, chain 49s->36s, overlap invariant held). Addendum on lesson #10. *(Already pushed by the human.)*
+## What was just built (2026-06-04, session 5 - rung #6 dashboard Track-4 panel)
+- 8cb39c6 **Rung #6 COMPLETE** - extended the existing Tracks-1-3 capstone dashboard with a 4th **"Unreal / Lyra Pipeline (Track 4)"** panel. Built TDD (red->green, both suites ALL PASS). `collect-metrics.ps1`: `ConvertFrom-UnrealMetrics` (pure, unit-tested: latest-per-step duration stages + latest stamp CL provenance; skips list-only BuildGraph dry-runs) + `Get-UnrealFeed` (local read of `unreal/.metrics`, no infra), wired in as a 4th feed with the same stale-fallback. `build-dashboard.ps1`: BuildGraph end-to-end + stamp-CL line, stage table (compile 83.9s / cook 1432s / package 90.5s / BuildGraph 62.2s), honest cold-DDC-vs-warm note. Demo state recaptured with real data incl. tonight's live run (stamp **CL 51 via teamcity**, engine CL 44394996); ci/accel/perforce preserved fresh (unreal feed is local). Self-contained, byte-deterministic (verified).
 
-Three bugs surfaced + fixed during the live run: (1) bench-agents CSRF; (2) the backtick-continuation stamp skip; (3) **Store-installed pwsh invisible to TeamCity's PowerShell-Core detector** - the human installed the pwsh 7 MSI (registry + standard path) so the agent detects Core; the `edition=Core` config runs unchanged.
+**Key discovery this session:** the dashboard already existed (committed `5496d49`, built mid-day as the Tracks-1-3 capstone) - both prior handoffs missed it because it was buried below `git log -5`. Rung #6 was therefore an *extension* (add Track-4 panel), not a from-scratch build. The dashboard is now a true **all-4-tracks capstone** (`dashboard/dashboard.html`, opens offline).
 
-## Infra state: FULLY TORN DOWN (cold)
-Everything is stopped and verified clear (docker daemon down, ports 1666/1667/8111 free, no p4d/broker, no agent java). The **native Windows agent install persists on disk at `C:\TeamCityAgent`** (console agent, runs as the human; portable Temurin 21 JRE at `C:\TeamCityAgent\jre` because the agent zip ships none). See auto-memory `native-windows-teamcity-agent`. Docker bind-mounted data under `ci/data/` persists, so a restart keeps the wizard/chain/Lyra config.
-
-**To bring it back up:** Docker Desktop -> `docker compose -f ci/docker-compose.yml up -d` -> `perforce/scripts/start-p4d.ps1` -> `perforce/broker/start-broker.ps1` -> start the agent (`agent.bat start` run from `C:\TeamCityAgent\bin`, cwd must be `bin`). The agent re-authorizes itself (identity persists in its conf).
+## Infra state: COLD (unchanged from session 4)
+Docker daemon down, ports 1666/1667/8111 free, no p4d/broker/agent. Native Windows TeamCity agent persists on disk at `C:\TeamCityAgent` (console; auto-memory `native-windows-teamcity-agent`). The Track-4 dashboard work needed NO infra (the unreal feed reads local `unreal/.metrics`).
 
 ## Live edge
-Rung #5 is **complete and demoed live**. Nothing is running (all cold). The only loose thread is the unpushed commit `494189f` - run `! git push origin main`.
+Track 4 rungs #1-#6 are all done (compile -> cook -> package -> BuildGraph -> CI CL-stamp -> dashboard). The dashboard is the committed all-4-tracks capstone. Nothing running; only loose thread is the ~4 unpushed commits.
 
 ## Next
-1. **Push:** `! git push origin main` (gets `494189f` to origin).
-2. **Rung #6 - the metrics dashboard:** ingest the `.metrics` JSONs (cook/package/buildgraph/stamp durations from `unreal/.metrics/`, build chain timings) into a small dashboard. This is the next net-new *capability* (data -> visualization), and the stamp run already emits a metric JSON per the wrapper convention.
-- **Heads-up (open seed):** the native-agent bring-up (drop JRE, verify pwsh Core, write `buildAgent.properties`, start, authorize via REST) is currently all manual - worth scripting into `ci/scripts/setup-win-agent.ps1` for reproducibility before relying on it again.
+1. **Push:** `! git push origin main`.
+2. **Consult `ROADMAP_NEXT.md` for the next phase.** Phase 1 (tracks 1-3 + dashboard) is closed; the roadmap's foundation-first order is **Track 4 deepening -> Horde -> Track 5 -> Capstone**. The first net-new *capability* candidate is **Horde** (Unreal's build/CI system) - confirm against ROADMAP_NEXT before committing, and define the demoable artifact for it first (scope-contract rule).
+- **Optional polish:** `dashboard/dashboard.html` (committed) still reflects ci/accel/perforce captured 06/04 19:26; a full `collect-metrics.ps1` run with infra up would refresh all four feeds in one pass (the canonical regeneration path).
