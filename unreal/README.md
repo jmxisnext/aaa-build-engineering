@@ -21,7 +21,7 @@ emitting a **CL-version-stamped package** (extends the Track 2 version-stamp pat
 1. UBT compiles `LyraEditor` (Development, Win64) — *first green.* ✅ **DONE 2026-06-04.** Cold baseline captured (423 actions, MPA=8): **UBA off 83.9s · UBA on 108.4s** — UBA is *slower* on a single box (lesson #3); commit-limit fight along the way (lesson #1); `-Clean`-isn't-cold trap (lesson #2).
 2. `RunUAT BuildCookRun` — cook content for Win64. ✅ **DONE 2026-06-04** via `cook-lyra.ps1` (cold cook **23.9 min**, 15,317 shaders, 1.8 GB cooked; DDC on `D:` → lesson #4).
 3. `RunUAT BuildCookRun` — stage + package a shippable build. ✅ **DONE 2026-06-04** via `package-lyra.ps1` (build `LyraGame` + stage + pak + archive, **90.5 s** reusing the cook; **1.72 GB** runnable build → `D:\LyraPackaged`).
-4. Author the above as a **BuildGraph** (`.xml`) — `RunUAT BuildGraph`.
+4. Author the above as a **BuildGraph** (`.xml`) — `RunUAT BuildGraph`. ✅ **DONE 2026-06-04** — `buildgraph/lyra-pipeline.xml` (Compile→Cook→Package nodes) runs end-to-end via `buildgraph-lyra.ps1` (**72.9s** incremental; surfaced the cook-platform rename a 3rd time → lesson #4).
 5. Wire the BuildGraph into a **TeamCity** build config; version-stamp with the P4 CL.
 6. Feed cook/package durations into the dashboard.
 
@@ -88,7 +88,14 @@ pwsh -File unreal/scripts/check-prereqs.ps1
   90 s, not another 24 min.
 
   **End-to-end cold pipeline (clean → packaged): ~27 min** = compile editor 84 s + cook 24 min +
-  package 90 s. The compile→cook→package ladder is green with real, timed artifacts. Next: **rung #4**
-  author it as a **BuildGraph** `.xml` (`RunUAT BuildGraph`) → **rung #5** run from **TeamCity**,
-  **version-stamping the package with the P4 changelist** (the track's headline artifact) → **rung
-  #6** dashboard ingests the cook/package durations.
+  package 90 s. The compile→cook→package ladder is green with real, timed artifacts.
+
+  **Rung #4 (BuildGraph) DONE** — `buildgraph/lyra-pipeline.xml` expresses the three rungs as
+  declarative nodes (`Compile Lyra Editor` → `Cook Lyra` → `Package Lyra`, aggregate `Lyra Pipeline`)
+  run via `buildgraph-lyra.ps1` (`-ListOnly` validates the graph; a real run executes it). End-to-end
+  **72.9 s** incremental (editor up-to-date, warm-DDC cook, content re-paked + archived). The real
+  run surfaced the `Win64`→`Windows` rename a *third* time — the BuildGraph `<Cook>` task is literal
+  where `BuildCookRun` is forgiving (lesson #4). This is the bridge from three scripts to one pipeline
+  TeamCity can drive. Next: **rung #5** run the graph from **TeamCity**, **version-stamping the
+  package with the P4 changelist** (the track's headline artifact) → **rung #6** dashboard ingests
+  the `.metrics` cook/package durations.

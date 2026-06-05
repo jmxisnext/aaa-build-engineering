@@ -149,6 +149,15 @@ UE5). A `-Clean`/cleanup that deletes `Saved\Cooked\Win64` removes nothing and s
 warm cook in place - the same "clean that didn't clean" failure mode as lesson #2, one rung up.
 `cook-lyra.ps1 -Clean` maps `Win64 -> Windows` so a cold cook is actually cold.
 
+  *Same rename, a third layer (rung #4):* the BuildGraph **`<Cook>` task** passes its `Platform`
+  straight to the cook commandlet as `-TargetPlatform=`, with **no mapping** - so `Platform="Win64"`
+  fails hard: `LogTargetPlatformManager: Error: Invalid target platform specified (Win64)`. The
+  `<Compile>` task and `BuildCookRun` both take the **build** name `Win64`, but `<Cook>` needs the
+  **cook** name `Windows`. `BuildCookRun` hides this by mapping internally; the lower-level task does
+  not. `lyra-pipeline.xml` carries a separate `CookPlatform=Windows` option for exactly this node.
+  Lesson: **`BuildCookRun` is forgiving, the primitive tasks are literal** - know which name each
+  layer wants (build vs target/cooked platform).
+
 **Gotcha B - `UE-LocalDataCachePath` only redirects *one* DDC node.** Set it to `D:\UE-DDC` to
 keep the heavy shader scratch on NVMe; afterward only **0.43 GB** landed on D:, while **1.12 GB**
 went to the *project* DDC (`<Project>\DerivedDataCache`) on `G:`. Both are NVMe and **C: stayed

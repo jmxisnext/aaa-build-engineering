@@ -1,0 +1,55 @@
+<?xml version='1.0' ?>
+<!--
+  Track 4, rung #4: the compile -> cook -> package pipeline as a single declarative
+  BuildGraph script. This is the bridge from "three PowerShell wrappers" to "one pipeline
+  TeamCity can run" (rung #5). Each node mirrors a rung that already runs green standalone:
+    Compile Lyra Editor   <- compile-lyra.ps1   (editor is what the cook commandlet runs in)
+    Cook Lyra             <- cook-lyra.ps1
+    Package Lyra          <- package-lyra.ps1   (BuildCookRun -build compiles the GAME target)
+
+  Run (validate the graph without building):
+    RunUAT BuildGraph -Script=unreal/buildgraph/lyra-pipeline.xml -Target="Lyra Pipeline" -ListOnly
+  Run for real:
+    RunUAT BuildGraph -Script=unreal/buildgraph/lyra-pipeline.xml -Target="Lyra Pipeline"
+  (the buildgraph-lyra.ps1 wrapper wraps both with timing + log + metric.)
+-->
+<BuildGraph xmlns="http://www.epicgames.com/BuildGraph"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://www.epicgames.com/BuildGraph ./Schema.xsd">
+
+  <!-- Overridable from the command line / TeamCity (-set:Name=Value) -->
+  <Option Name="ProjectPath"   DefaultValue="G:\UnrealProjects\LyraStarterGame\Lyra.uproject" Description="Path to the .uproject"/>
+  <Option Name="EditorTarget"  DefaultValue="LyraEditor" Description="Editor target (host the cook commandlet)"/>
+  <Option Name="GameTarget"    DefaultValue="LyraGame"   Description="Standalone game target to package"/>
+  <Option Name="Platform"      DefaultValue="Win64"      Description="BUILD platform (UBT/BuildCookRun name)"/>
+  <Option Name="CookPlatform"  DefaultValue="Windows"    Description="COOK/target platform name. UE maps build 'Win64' -> cook 'Windows'; BuildCookRun maps it for you but the lower-level Cook task does NOT - pass 'Windows' or the cook commandlet errors 'Invalid target platform (Win64)'. See lessons-learned.md #4."/>
+  <Option Name="Configuration" DefaultValue="Development" Description="Build configuration"/>
+  <Option Name="ArchiveDir"    DefaultValue="D:\LyraPackaged" Description="Where the shippable build is archived"/>
+
+  <!-- Reused project arg (quoted to survive spaces) -->
+  <Property Name="ProjectArg" Value="-Project=&quot;$(ProjectPath)&quot;"/>
+
+  <Agent Name="Lyra Pipeline Agent" Type="Win64">
+
+    <!-- Rung #1: compile the editor (cooking runs inside the editor commandlet). -->
+    <Node Name="Compile Lyra Editor">
+      <Compile Target="$(EditorTarget)" Platform="$(Platform)" Configuration="$(Configuration)" Arguments="$(ProjectArg)"/>
+    </Node>
+
+    <!-- Rung #2: cook content for the platform (needs the editor).
+         Cook task takes the COOK platform name ('Windows'), not the build name ('Win64'). -->
+    <Node Name="Cook Lyra" Requires="Compile Lyra Editor">
+      <Cook Project="$(ProjectPath)" Platform="$(CookPlatform)"/>
+    </Node>
+
+    <!-- Rung #3: build the game target + stage + pak + archive a runnable build (reuse the cook). -->
+    <Node Name="Package Lyra" Requires="Cook Lyra">
+      <Command Name="BuildCookRun" Arguments="$(ProjectArg) -platform=$(Platform) -clientconfig=$(Configuration) -target=$(GameTarget) -build -skipcook -stage -pak -archive -archivedirectory=&quot;$(ArchiveDir)&quot; -nocompileeditor -unattended -utf8output"/>
+    </Node>
+
+  </Agent>
+
+  <!-- The single name TeamCity (and -Target) asks for; pulls the whole chain. -->
+  <Aggregate Name="Lyra Pipeline" Requires="Package Lyra"/>
+
+</BuildGraph>
