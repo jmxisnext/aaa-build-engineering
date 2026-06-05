@@ -135,3 +135,39 @@ helper agents**; with **none configured**, you pay the coordination tax for zero
   CAS/detour) isn't amortised; action time was within ~2s.
 - UBA/distributed-compile tools pay off **across machines** (Horde). Benchmark in the deployment
   regime, or you'll draw the wrong conclusion.
+
+## 4. First cold cook: 24 min / 15k shaders, and two cook-pipeline gotchas
+
+**What happened:** Rung #2 - cooked Lyra for Win64 via `RunUAT BuildCookRun -cook -skipstage`
+(cook-only; staging is rung #3). Cold cook (empty DDC) = **1432s (~23.9 min)**, compiling
+**15,317 shaders**, producing **1.8 GB** of cooked output (9,063 files), 0 errors. That ~24 min
+is dominated by shader compilation - the cook's real cost and exactly why the DDC matters.
+
+**Gotcha A - the build platform is not the cooked-folder name.** `-platform=Win64` cooks into
+`Saved\Cooked\`**`Windows`**, not `...\Win64` (UE renamed the cooked target Win64 -> Windows in
+UE5). A `-Clean`/cleanup that deletes `Saved\Cooked\Win64` removes nothing and silently leaves a
+warm cook in place - the same "clean that didn't clean" failure mode as lesson #2, one rung up.
+`cook-lyra.ps1 -Clean` maps `Win64 -> Windows` so a cold cook is actually cold.
+
+**Gotcha B - `UE-LocalDataCachePath` only redirects *one* DDC node.** Set it to `D:\UE-DDC` to
+keep the heavy shader scratch on NVMe; afterward only **0.43 GB** landed on D:, while **1.12 GB**
+went to the *project* DDC (`<Project>\DerivedDataCache`) on `G:`. Both are NVMe and **C: stayed
+clean**, so the drive-plan intent (heavy I/O off the system drive) held - but "point the DDC at
+D:" is **partial**: UE's DDC is a multi-node graph (Boot/Local/Shared/project), and the env var
+overrides only the Local node. Total consolidation needs the project/shared nodes redirected too
+(DDC backend graph in `DefaultEngine.ini`, or `UE-SharedDataCachePath`).
+
+**Why a build engineer cares:**
+- **Cook time = shader-compile time.** "How long is your cook?" is really "how warm is your DDC
+  and how many shader permutations." A shared/network DDC (or Horde's) turning a 24-min cold cook
+  into a ~1-min warm cook is the single biggest cook-throughput lever on a team.
+- **Platform name mapping bites cleanup and staging scripts** (`Win64` build target vs `Windows`
+  cooked/staged folder). Hard-coding the wrong one passes silently until a stale cook ships.
+- **"Move the DDC to fast disk" is multi-node**, not one path - verify *where bytes actually
+  landed*, don't assume one env var relocated the whole cache.
+
+**Interview TL;DR:**
+- Cold Lyra Win64 cook: **~24 min, 15.3k shaders, 1.8 GB** cooked - shader compilation dominates;
+  warm DDC is the lever.
+- `Win64` (build) cooks to `Saved\Cooked\Windows` (cooked) - mind the rename in clean/stage steps.
+- `UE-LocalDataCachePath` moves only the Local DDC node; confirm on disk, the cache is multi-node.

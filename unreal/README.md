@@ -19,7 +19,7 @@ emitting a **CL-version-stamped package** (extends the Track 2 version-stamp pat
 **Lyra compiles via UBT from the command line.** Then grow outward, one runnable step at a time:
 
 1. UBT compiles `LyraEditor` (Development, Win64) — *first green.* ✅ **DONE 2026-06-04.** Cold baseline captured (423 actions, MPA=8): **UBA off 83.9s · UBA on 108.4s** — UBA is *slower* on a single box (lesson #3); commit-limit fight along the way (lesson #1); `-Clean`-isn't-cold trap (lesson #2).
-2. `RunUAT BuildCookRun` — cook content for Win64.
+2. `RunUAT BuildCookRun` — cook content for Win64. ✅ **DONE 2026-06-04** via `cook-lyra.ps1` (cold cook **23.9 min**, 15,317 shaders, 1.8 GB cooked; DDC on `D:` → lesson #4).
 3. `RunUAT BuildCookRun` — stage + package a shippable build.
 4. Author the above as a **BuildGraph** (`.xml`) — `RunUAT BuildGraph`.
 5. Wire the BuildGraph into a **TeamCity** build config; version-stamp with the P4 CL.
@@ -71,5 +71,12 @@ pwsh -File unreal/scripts/check-prereqs.ps1
   `D:`); UBA-on cold build now runs with **zero OOM** (lesson #1 closed). **Measurement gotcha
   fixed:** UBT's `-Clean` is clean-*only* (a 7.3 s "success" that compiled nothing) — the script's
   `-Clean` now clears `Intermediate\Build`+`Binaries` project-wide to force a true cold build
-  (lesson #2). Next rungs: **`RunUAT BuildCookRun`** (cook for Win64; point DDC/cook scratch at
-  `D:`) → package → BuildGraph → TeamCity.
+  (lesson #2).
+
+  **Rung #2 (cook) DONE** via `cook-lyra.ps1` (`RunUAT BuildCookRun -cook -skipstage`): cold cook
+  **1432 s (~23.9 min)**, **15,317 shaders**, **1.8 GB** cooked to `Saved\Cooked\Windows`
+  (9,063 files), 0 errors. Cook time is shader-compile-bound → a warm DDC is the lever. Local DDC
+  pointed at `D:` (0.43 GB) but the project DDC node still wrote 1.12 GB to `G:` — all on NVMe,
+  C: untouched; full DDC consolidation is a follow-up (lesson #4 — incl. the `Win64`→`Windows`
+  cooked-folder rename). Next rungs: **rung #3 stage + package** (`BuildCookRun -stage -pak
+  -archive`, stamp the P4 CL) → rung #4 BuildGraph `.xml` → rung #5 TeamCity → rung #6 dashboard.
