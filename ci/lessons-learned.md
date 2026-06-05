@@ -569,6 +569,15 @@ so it fetches and carries **two** tokens, one per session. Both scripts patched 
 clean from scratch (project + VCS root + 4-config chain rebuilt; ci-hook token re-minted;
 VCS trigger re-added).
 
+**Addendum (2026-06-04):** a *third* write-path script, `bench-agents.ps1`, was overlooked
+in the original sweep — its `Invoke-TC` does the same session-Basic-auth but issues writes
+(`PUT .../enabledInfo`, `PUT .../authorized`, `POST /buildQueue`) with no CSRF token, so it
+would 403 the same way the moment it ran against 2026.x. Now patched with the identical
+fetch-once-per-session pattern. The lesson reinforces itself: when a security control lands,
+audit *every* script that authenticates a session and writes — not just the one that failed.
+The miss happened because bench-agents is only run ad-hoc (the agent-pool benchmark), so its
+write path had never fired post-bump.
+
 **Why a build engineer cares:** this is the canonical "latent until the reset path runs"
 failure — the automation looked healthy for months because the happy path was all GETs,
 and the write path only fires during disaster recovery, which is the worst time to discover

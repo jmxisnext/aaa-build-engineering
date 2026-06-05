@@ -64,14 +64,25 @@ if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
 if (-not $Token) { $Token = Get-SuperUserToken }
 $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
 
+# TeamCity 2026.x rejects session-authenticated *writes* (PUT enable/authorize, POST
+# buildQueue) that carry no CSRF token — HTTP 403 "failed CSRF check". This script is
+# write-heavy (it toggles agent-02 and queues chains every trial), so unlike a GET-only
+# probe it MUST carry one. Open one web session, fetch the CSRF token once, and send it
+# as X-TC-CSRF-Token on every mutating request; GETs ride the same session. (lesson #10)
+$csrfToken = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
+    -Headers @{ Authorization = $auth } -SessionVariable tcSession
+
 # ---------- REST helpers ----------
 
 function Invoke-TC {
     param([string]$Method, [string]$Path, $Body,
           [string]$ContentType = "application/json",
           [string]$Accept = "application/json")
+    $headers = @{ Authorization = $auth; Accept = $Accept }
+    # CSRF token required on writes (see auth note above); harmless on GETs.
+    if ($Method -in @("POST","PUT","DELETE")) { $headers["X-TC-CSRF-Token"] = $csrfToken }
     $p = @{ Method = $Method; Uri = "$BaseUrl$Path"
-            Headers = @{ Authorization = $auth; Accept = $Accept } }
+            Headers = $headers; WebSession = $tcSession }
     if ($null -ne $Body) {
         $p.Body = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 8 }
         $p.ContentType = $ContentType
