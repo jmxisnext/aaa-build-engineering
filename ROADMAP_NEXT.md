@@ -131,16 +131,16 @@ artifact, then layer the differentiator onto the same graph.
 - Hardware: GPU fine (3060 12 GB runs the Lyra editor); RAM 31 GB is the ceiling — **serialize**
   (don't run UE + TeamCity + Docker heavy at once). Source on J:, UE+Lyra on G:, DDC/scratch on D:.
 
-**Step 2 (NEXT) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2; **time-boxed ~1 session**]
+**Step 2 (IN PROGRESS — smallest slice ✅) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
 - **Demoable artifact (the win condition):** a local **Horde Server + one agent** runs the
   **unmodified** `unreal/buildgraph/lyra-pipeline.xml` and produces the **same CL-version-stamped
   package + `.metrics`** the TeamCity path already produces — and the **dashboard shows a Horde run
   alongside the TeamCity run** (a "Horde vs TeamCity" row), proving the *same graph runs under two
   orchestrators*. Value proposition = **graph portability + Horde job-submission mechanics**, NOT a
   speed/scale number (see hardware note).
-- **Smallest runnable first slice (loop on this):** Horde Server up + one agent authorized + the
-  agent runs a **single Compile node** of the graph end-to-end. Then grow: full graph → CL-stamp
-  parity with the TeamCity package → dashboard ingests the Horde `.metrics` as a second source.
+- **Smallest runnable first slice: ✅ DONE (2026-06-11)** — Horde Server + one agent + `Compile Lyra
+  Editor` node of `lyra-pipeline.xml` ran end-to-end (405 files, UBT, Success). Same XML as TeamCity.
+- **Remaining:** full graph (compile→cook→package) → CL-stamp parity → dashboard "Horde vs TeamCity" row.
 - **Hardware reality (don't over-promise):** 8 cores = honest **overhead-overlap, not farm-scale**.
   UBA is ~29% *slower* single-box (lesson #3 — its win is remote agents, which one box lacks), and
   even unlimited RAM won't change that (the cost is ~22 s server/CAS/detour setup, not memory). The

@@ -1,36 +1,54 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: d105e0f - chore: amend chronicle seed - final home shape (private repo consuming this infra)
+Branch: main   |   Last commit: 31f7b7e - chore: jam closeout - update handoff prompt
 
-**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets, the real machine name (scrub to `WS01`), or job-hunt / employer specifics. **No co-author trailer.** `git push` is permission-blocked for the agent — the human runs `! git push origin main`. **Unpushed: now 5 commits ahead of origin/main** (`bc32e03` sanity-check, `5aa7c52` closeout, `bfb04a2` seeds, `d105e0f` seed amendment, + this closeout) — push when convenient. Also still possibly unpushed: the `jam` plugin at `J:\jammers-lab\.jam` (`131b17d`). `data/`, `localbak/`, vendor binaries, `accel/extern/`, `accel/.metrics/`, `unreal/.logs/`, `unreal/.metrics/`, `dashboard/_preview.html`, `**/.env` (except `ci/.env`) are gitignored.
+**This repo is PUBLIC:** https://github.com/jmxisnext/aaa-build-engineering . Never commit secrets,
+the real machine name (scrub to `WS01`), or job-hunt / employer specifics. **No co-author trailer.**
+`git push` is permission-blocked for the agent — the human runs `! git push origin main`.
+**Unpushed: still 5 commits ahead of origin/main** — push when convenient.
 
-## What was just built (2026-06-11, session 7 - seeds only; no track work)
-- `d105e0f` + `bfb04a2` - **chronicle/gameplay seeds parked** from the 2026-06-11 chronicle-engine
-  ideation (record lives privately in `J:\jammers-lab\noosphere\docs\ideation\2026-06-11-chronicle-engine\`).
-  Final shape: the **Chronicle G0 kernel lives in its own PRIVATE repo**
-  (`J:\jammers-lab\chronicle-kernel`, scaffolded same day) and **consumes this repo's
-  infrastructure** - TeamCity tests-on-commit + SHA version-stamp + failure notifier, the
-  determinism gate as a byte-diff CI job, optional dashboard feed (generic job names -
-  `snapshot.json` is public), post-gate the UE/Lyra/BuildGraph pipeline for a correction-quest
-  demo. This repo publicly carries only the pipeline-integration story; kernel code goes public
-  only on a passed gate. Two-speed rule in SEEDS: gameplay SKILL tracks any time; demoing the
-  game itself gated behind the kernel gate.
-- No commits to tracks 1-5 / dashboard this session; ROADMAP state unchanged.
+## What was just built (2026-06-11, session 8 - Horde Phase 2 smallest slice)
+*(Session was pure machine-config — no repo commits. All changes live in the Horde install at
+G:\HordeAgent and server config at C:\ProgramData\Epic\Horde\Server.)*
+
+- **Horde "Compile Lyra Editor" = Completed/Success** — same unmodified `lyra-pipeline.xml` as
+  TeamCity. 405 files compiled by UBT via Horde's LocalExecutor. Graph portability demonstrated.
+  Job ID `6a2af032c7742580007c490b` on the local Horde server (http://localhost:13340).
 
 ## Live edge
-Unchanged: **Horde (Phase 2 Step 2) is NEXT** with its defined demoable artifact (portability
-proof: same BuildGraph under Horde *and* TeamCity). New standing decision queued for the next
-in-session sequencing call: Horde step 2 vs wiring the chronicle-kernel CI config — do not let the
-kernel work displace Horde silently; pick one explicitly at session start.
+Horde Phase 2 smallest slice is done. The demoable claim now stands: **the same BuildGraph XML runs
+under both TeamCity and Horde on this box**. Remaining Step 2 work: full graph
+(compile→cook→package) → CL-stamp parity with the TeamCity package → dashboard "Horde vs TeamCity"
+row (ingest a `.metrics` from a Horde job as a second source alongside the TeamCity row).
 
 ## Next
-1. **Push:** `! git push origin main` (5 commits ahead), and check/push the `jam` plugin repo.
-2. **Sequencing call, then execute:** either (a) **Horde Phase 2 Step 2** — smallest slice: Horde
-   Server up + one agent authorized + agent runs a single Compile node of
-   `unreal/buildgraph/lyra-pipeline.xml` end-to-end; then full graph → CL-stamp parity →
-   dashboard Horde-vs-TeamCity row; frame as portability + job mechanics, NOT speed (UBA ~29%
-   slower single-box; 64 GB pagefile prevents OOM but isn't real RAM — serialize UE + Horde +
-   agent, never concurrent with the TeamCity/Docker stack); or (b) a TeamCity build config for
-   `chronicle-kernel` once that repo has a test suite (it currently has none — scaffold only, so
-   (a) is the natural pick unless the kernel's protocol+fixture land first).
+**Continue Step 2 — grow to full `Lyra Pipeline` (compile→cook→package) under Horde.**
+
+**First, verify machine state (all non-repo config, must be intact):**
+- `Test-Path G:\HordeAgent\Engine` → True (junction → G:\UnrealEngine\UE_5.6\Engine)
+- `Test-Path G:\HordeAgent\Engine\Source\Programs\Horde\Horde.sln` → True (stub sentinel for FindWorkspaceRoot)
+- `G:\HordeAgent\JobDriver\appsettings.json` → contains `"Driver": { "Executor": "Local" }`
+- `game-main.stream.json` template arguments include `-NoP4`
+- Horde server on port 13340 running; agent process running
+
+**Submit full-pipeline job (after verifying stream template default item is "Lyra Pipeline"):**
+```powershell
+$body = @{ streamId = "game-main"; templateId = "lyra-buildgraph" } | ConvertTo-Json
+Invoke-WebRequest -Uri "http://localhost:13340/api/v1/jobs" -Method POST -ContentType "application/json" -Body $body -UseBasicParsing
+```
+Or change the template's default list item in `game-main.stream.json` from "Compile Lyra Editor"
+to "Lyra Pipeline (full compile-cook-package)" and re-submit with no arguments.
+
+**Why the three workarounds (do NOT re-debug):**
+1. `IOptions<LocalExecutorSettings>.WorkspaceDir` is never bound by DriverApp — config file has no
+   effect. Fix: `G:\HordeAgent\Engine` junction + stub `Horde.sln` → `FindWorkspaceRoot()` returns
+   `G:\HordeAgent\` as workspace root; RunUAT resolves through the junction.
+2. LocalExecutor always passes `useP4=null`; `-NoP4` only auto-injected when `useP4=false`. Fix:
+   `-NoP4` in template `arguments` → lands in `_additionalArguments` → SetupAsync appends it
+   (JobExecutor.cs:793-796).
+3. POSTing `{ arguments: [...] }` replaces the template's fixed `arguments` (drops `-Script=`). Fix:
+   omit `arguments` from the API call to use template + parameter defaults.
+
+**After full pipeline green:** emit a `.metrics` file from the Horde job, then add a "Horde vs
+TeamCity" row to the dashboard panel.
