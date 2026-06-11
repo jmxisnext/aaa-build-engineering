@@ -140,6 +140,7 @@ artifact, then layer the differentiator onto the same graph.
   speed/scale number (see hardware note).
 - **Smallest runnable first slice: ✅ DONE (2026-06-11)** — Horde Server + one agent + `Compile Lyra
   Editor` node of `lyra-pipeline.xml` ran end-to-end (405 files, UBT, Success). Same XML as TeamCity.
+  Setup + workarounds documented in `unreal/horde/README.md` (configs versioned in `unreal/horde/config/`).
 - **Remaining:** full graph (compile→cook→package) → CL-stamp parity → dashboard "Horde vs TeamCity" row.
 - **Hardware reality (don't over-promise):** 8 cores = honest **overhead-overlap, not farm-scale**.
   UBA is ~29% *slower* single-box (lesson #3 — its win is remote agents, which one box lacks), and

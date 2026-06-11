@@ -99,3 +99,8 @@ pwsh -File unreal/scripts/check-prereqs.ps1
   TeamCity can drive. ✅ **rung #5 DONE** (`923f0d3`) — the graph runs from **TeamCity**, version-stamping the
   package with the P4 changelist (the track's headline artifact); ✅ **rung #6 DONE** (`8cb39c6`) — the dashboard ingests
   the `.metrics` cook/package durations.
+
+- **2026-06-11:** **Horde (Phase 2 Step 2) smallest slice DONE** — a local Horde Server + one agent
+  ran the unmodified `lyra-pipeline.xml` Compile node to Success via the Local executor (405 UBT
+  actions). Same graph, second orchestrator. Setup, config, and the three LocalExecutor-on-installed-
+  engine workarounds: **[`horde/README.md`](horde/README.md)**.

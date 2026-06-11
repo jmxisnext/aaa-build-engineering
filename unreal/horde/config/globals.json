@@ -1,0 +1,54 @@
+{
+	// Schema version number for the config file. New Horde versions may bump this number and introduce schema changes. Upgrade info
+	// will be printed to the log on startup.
+	"version": 2,
+
+	// Include default settings from the Horde installation folder
+	"include": [
+		{
+			"path": "$(HordeDir)/Defaults/default.global.json"
+		}
+	],
+
+	"plugins": {
+		"build": {
+			// Definitions for projects in the CI system
+			"projects": [
+				{
+					"id": "aaa",
+					"path": "aaa.project.json"
+				}
+			],
+
+			// Configuration for different Perforce servers. The Track-1 sandbox p4d on this box (security level 0,
+			// passwordless) supplies changelist numbers for job provenance — the same depot the TeamCity path stamps from.
+			"perforceClusters":
+			[
+				{
+					"name": "Default",
+					"servers":
+					[
+						{
+							"serverAndPort": "localhost:1666"
+						}
+					],
+					"credentials":
+					[
+						{
+							"userName": "james"
+						}
+					]
+				}
+			]
+		}
+	},
+
+	// Default deployment parameters for other tools bundled with Horde. These can be queried at runtime without auth using the default Horde server.
+	"parameters": {
+		"ugs":
+		{
+			// Set the default Perforce server for anyone using UGS.
+//			"defaultPerforceServer": "perforce:1666"
+		}
+	}
+}

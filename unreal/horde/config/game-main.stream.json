@@ -1,0 +1,64 @@
+{
+	// Real stream in the Track-1 sandbox p4d; supplies the CL numbers shown on jobs,
+	// the same depot the TeamCity Lyra config stamps from (parity for the demo).
+	"name": "//game/main",
+
+	// One-box demo wiring: run jobs with the Local executor — no Perforce sync on the
+	// agent. The stream provides provenance, the local disk provides the build inputs
+	// (mirrors the TeamCity config's checkout=MANUAL decision). The value demonstrated
+	// is graph portability + Horde job mechanics, not farm scale.
+	// NOTE: WorkspaceDir cannot be configured (workaround #1 in ../README.md) — the
+	// workspace root is discovered via the Engine junction + Horde.sln stub instead.
+	"jobOptions": {
+		"executor": "Local"
+	},
+
+	"tabs": [
+		{
+			"title": "Lyra",
+			"templates": [
+				"lyra-buildgraph"
+			]
+		}
+	],
+
+	// The graph's single <Agent> is Type="Win64"; map it onto the default Win-UE5 pool
+	// (bundled default.global.json auto-includes agents with Platform == 'Win64').
+	"agentTypes": {
+		"Win64": {
+			"pool": "win-ue5"
+		}
+	},
+
+	"templates": [
+		{
+			"id": "lyra-buildgraph",
+			"name": "Lyra BuildGraph (installed engine)",
+			"description": "Runs the unmodified unreal/buildgraph/lyra-pipeline.xml from the repo working tree against the installed UE 5.6 + Lyra on this box. Default target is the single Compile node (smallest slice); select the full pipeline via the Target parameter.",
+			"arguments": [
+				"-Script=J:\\jammers-lab\\aaa-build-engineering\\unreal\\buildgraph\\lyra-pipeline.xml",
+				"-set:ProjectPath=G:\\UnrealProjects\\LyraStarterGame\\Lyra.uproject",
+				"-set:ArchiveDir=D:\\LyraPackaged",
+				"-NoP4"
+			],
+			"parameters": [
+				{
+					"type": "List",
+					"style": "List",
+					"label": "Target",
+					"items": [
+						{
+							"text": "Compile Lyra Editor",
+							"argumentIfEnabled": "-Target=Compile Lyra Editor",
+							"default": true
+						},
+						{
+							"text": "Lyra Pipeline (full compile-cook-package)",
+							"argumentIfEnabled": "-Target=Lyra Pipeline"
+						}
+					]
+				}
+			]
+		}
+	]
+}

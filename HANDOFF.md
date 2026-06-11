@@ -9,12 +9,12 @@ the real machine name (scrub to `WS01`), or job-hunt / employer specifics. **No 
 **Unpushed: still 5 commits ahead of origin/main** — push when convenient.
 
 ## What was just built (2026-06-11, session 8 - Horde Phase 2 smallest slice)
-*(Session was pure machine-config — no repo commits. All changes live in the Horde install at
-G:\HordeAgent and server config at C:\ProgramData\Epic\Horde\Server.)*
-
 - **Horde "Compile Lyra Editor" = Completed/Success** — same unmodified `lyra-pipeline.xml` as
   TeamCity. 405 files compiled by UBT via Horde's LocalExecutor. Graph portability demonstrated.
   Job ID `6a2af032c7742580007c490b` on the local Horde server (http://localhost:13340).
+- **`unreal/horde/README.md`** — reproducibility artifact: install/enroll steps, the three
+  LocalExecutor-on-installed-engine workarounds with root causes, job-submit + verification
+  recipes, machine-state checklist. Server/agent configs versioned in `unreal/horde/config/`.
 
 ## Live edge
 Horde Phase 2 smallest slice is done. The demoable claim now stands: **the same BuildGraph XML runs
@@ -25,30 +25,19 @@ row (ingest a `.metrics` from a Horde job as a second source alongside the TeamC
 ## Next
 **Continue Step 2 — grow to full `Lyra Pipeline` (compile→cook→package) under Horde.**
 
-**First, verify machine state (all non-repo config, must be intact):**
-- `Test-Path G:\HordeAgent\Engine` → True (junction → G:\UnrealEngine\UE_5.6\Engine)
-- `Test-Path G:\HordeAgent\Engine\Source\Programs\Horde\Horde.sln` → True (stub sentinel for FindWorkspaceRoot)
-- `G:\HordeAgent\JobDriver\appsettings.json` → contains `"Driver": { "Executor": "Local" }`
-- `game-main.stream.json` template arguments include `-NoP4`
-- Horde server on port 13340 running; agent process running
+**Everything needed is in `unreal/horde/README.md`** — machine-state checklist (run it at session
+start: junction, Horde.sln sentinel, Executor=Local, -NoP4, server+agent up), the three
+LocalExecutor workarounds (do NOT re-debug them), and the job-submit recipe.
 
-**Submit full-pipeline job (after verifying stream template default item is "Lyra Pipeline"):**
+To run the full pipeline: change the template's default list item in
+`C:\ProgramData\Epic\Horde\Server\game-main.stream.json` from "Compile Lyra Editor" to
+"Lyra Pipeline (full compile-cook-package)" (keep the versioned copy in `unreal/horde/config/` in
+sync), then submit with no `arguments`:
 ```powershell
 $body = @{ streamId = "game-main"; templateId = "lyra-buildgraph" } | ConvertTo-Json
 Invoke-WebRequest -Uri "http://localhost:13340/api/v1/jobs" -Method POST -ContentType "application/json" -Body $body -UseBasicParsing
 ```
-Or change the template's default list item in `game-main.stream.json` from "Compile Lyra Editor"
-to "Lyra Pipeline (full compile-cook-package)" and re-submit with no arguments.
-
-**Why the three workarounds (do NOT re-debug):**
-1. `IOptions<LocalExecutorSettings>.WorkspaceDir` is never bound by DriverApp — config file has no
-   effect. Fix: `G:\HordeAgent\Engine` junction + stub `Horde.sln` → `FindWorkspaceRoot()` returns
-   `G:\HordeAgent\` as workspace root; RunUAT resolves through the junction.
-2. LocalExecutor always passes `useP4=null`; `-NoP4` only auto-injected when `useP4=false`. Fix:
-   `-NoP4` in template `arguments` → lands in `_additionalArguments` → SetupAsync appends it
-   (JobExecutor.cs:793-796).
-3. POSTing `{ arguments: [...] }` replaces the template's fixed `arguments` (drops `-Script=`). Fix:
-   omit `arguments` from the API call to use template + parameter defaults.
+Expect the cook step to dominate (~24 min cold / much less on the warm DDC from 2026-06-04 runs).
 
 **After full pipeline green:** emit a `.metrics` file from the Horde job, then add a "Horde vs
 TeamCity" row to the dashboard panel.

@@ -1,0 +1,15 @@
+{
+	// Goes to <agent install dir>\appsettings.User.json (e.g. G:\HordeAgent\).
+	// "Server" must be a PROFILE NAME, not a URL — pointing it at a URL fails with
+	// "Unknown server profile name 'http://...'".
+	"Horde": {
+		"Server": "Default",
+		"ServerProfiles": {
+			"Default": {
+				"Url": "http://localhost:13340",
+				"Environment": "prod"
+			}
+		},
+		"WorkingDir": "D:\\HordeAgentData\\Sandbox"
+	}
+}
