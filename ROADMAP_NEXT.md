@@ -131,7 +131,7 @@ artifact, then layer the differentiator onto the same graph.
 - Hardware: GPU fine (3060 12 GB runs the Lyra editor); RAM 31 GB is the ceiling — **serialize**
   (don't run UE + TeamCity + Docker heavy at once). Source on J:, UE+Lyra on G:, DDC/scratch on D:.
 
-**Step 2 (IN PROGRESS — smallest slice ✅) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
+**Step 2 (IN PROGRESS — full pipeline + dashboard ✅, CL-stamp parity remaining) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
 - **Demoable artifact (the win condition):** a local **Horde Server + one agent** runs the
   **unmodified** `unreal/buildgraph/lyra-pipeline.xml` and produces the **same CL-version-stamped
   package + `.metrics`** the TeamCity path already produces — and the **dashboard shows a Horde run
@@ -141,7 +141,12 @@ artifact, then layer the differentiator onto the same graph.
 - **Smallest runnable first slice: ✅ DONE (2026-06-11)** — Horde Server + one agent + `Compile Lyra
   Editor` node of `lyra-pipeline.xml` ran end-to-end (405 files, UBT, Success). Same XML as TeamCity.
   Setup + workarounds documented in `unreal/horde/README.md` (configs versioned in `unreal/horde/config/`).
-- **Remaining:** full graph (compile→cook→package) → CL-stamp parity → dashboard "Horde vs TeamCity" row.
+- **Full pipeline + dashboard row: ✅ DONE (2026-06-13, `d816ec7`)** — the unmodified graph ran
+  compile→cook→package end-to-end under Horde (job `6a2da13d…`, ~28.5 min, cook ~24.6 min); the Horde
+  job emits a `source=horde` `.metrics` and the dashboard renders the "Orchestrator parity — Horde vs
+  TeamCity" row. (Gotcha: p4d must be up — the server validates the Perforce cluster at lease-assignment.)
+- **Remaining:** CL-stamp parity — the BuildGraph `Package` node writes paks but not `build-info.json`,
+  so the Horde package still carries the prior TeamCity stamp (run `stamp-lyra-package.ps1` against it).
 - **Hardware reality (don't over-promise):** 8 cores = honest **overhead-overlap, not farm-scale**.
   UBA is ~29% *slower* single-box (lesson #3 — its win is remote agents, which one box lacks), and
   even unlimited RAM won't change that (the cost is ~22 s server/CAS/detour setup, not memory). The

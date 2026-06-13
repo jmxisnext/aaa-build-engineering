@@ -104,3 +104,9 @@ pwsh -File unreal/scripts/check-prereqs.ps1
   ran the unmodified `lyra-pipeline.xml` Compile node to Success via the Local executor (405 UBT
   actions). Same graph, second orchestrator. Setup, config, and the three LocalExecutor-on-installed-
   engine workarounds: **[`horde/README.md`](horde/README.md)**.
+
+- **2026-06-13:** **Horde full pipeline + dashboard parity DONE** (`d816ec7`) — the unmodified
+  `lyra-pipeline.xml` ran compile→cook→package end-to-end under Horde (job `6a2da13d…`, ~28.5 min);
+  the Horde job emits a `source=horde` `.metrics` and the dashboard shows an "Orchestrator parity —
+  Horde vs TeamCity" row. Remaining Step-2 gap: CL-stamp parity (the `Package` node writes paks, not
+  the stamp). p4d must be up before submitting (server validates the Perforce cluster at lease-assignment).
