@@ -42,6 +42,11 @@ Assert-Match 'CL\s*51'                          $html 'renders the stamp changel
 Assert-Match '1432'                             $html 'renders the cook stage duration'
 Assert-Match '62\.2'                            $html 'renders the BuildGraph end-to-end duration'
 Assert-Match 'cold'                             $html 'has the cook cold-baseline note'
+# ---- Horde vs TeamCity orchestrator parity ----
+Assert-Match 'Orchestrator parity'              $html 'has the Horde-vs-TeamCity parity section'
+Assert-Match 'horde'                            $html 'renders the Horde orchestrator row'
+Assert-Match 'teamcity'                         $html 'renders the TeamCity orchestrator row'
+Assert-Match '1711'                             $html 'renders the Horde end-to-end duration'
 # self-contained: no external script/style/CDN (xmlns + localhost build links are OK)
 Assert-NotMatch '<script'                       $html 'no <script> tags'
 Assert-NotMatch '<link\s'                       $html 'no <link> stylesheet refs'

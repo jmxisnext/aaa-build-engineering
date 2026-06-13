@@ -11,9 +11,19 @@ remote agents for UBA to win on — see `../lessons-learned.md` #3).
 1. Horde Server up + one agent enrolled/authorized. ✅ **DONE 2026-06-11.**
 2. Agent runs the single **Compile Lyra Editor** node end-to-end via LocalExecutor. ✅ **DONE
    2026-06-11** — 405 UBT actions, `Completed/Success`, same XML TeamCity runs.
-3. Full graph (compile → cook → package) under Horde. ⬜ NEXT
-4. CL-stamp parity with the TeamCity package. ⬜
-5. Dashboard "Horde vs TeamCity" row (Horde job emits `.metrics` as a second source). ⬜
+3. Full graph (compile → cook → package) under Horde. ✅ **DONE 2026-06-13** — job
+   `6a2da13d2729362a627914ca`, `Complete`. Setup 56s · Compile 59s (warm) · **Cook 1476s
+   (~24.6 min, cold-ish: Vulkan SM6 perms not in DDC)** · Package 120s = **1711s end-to-end**.
+   Paks (`pakchunk0/1/2`, 1.72 GB) archived to `D:\LyraPackaged`. Same unmodified
+   `lyra-pipeline.xml` TeamCity runs.
+4. CL-stamp parity with the TeamCity package. ⬜ — the BuildGraph `Package Lyra` node writes the
+   **paks**, but **not** the CL stamp / `build-info.json` (that's the separate `stamp-lyra-package.ps1`
+   step). After a Horde run, `D:\LyraPackaged\Windows\build-info.json` is still the *prior* TeamCity
+   stamp. Next: run the stamp step against the Horde-produced package (or add a stamp node to the graph).
+5. Dashboard "Horde vs TeamCity" row (Horde job emits `.metrics` as a second source). ✅ **DONE
+   2026-06-13** — Horde job emits `unreal/.metrics/buildgraph-Lyra-horde-*.json` (`source: horde`);
+   collector groups buildgraph by source into `unreal.orchestrators`; dashboard renders the
+   **Orchestrator parity** table. `stages` buildgraph stays the TeamCity/warm baseline.
 
 ## Topology
 
@@ -127,4 +137,13 @@ Green run shape: batch 1 `Setup Build = Completed/Success` (BuildGraph `-ListOnl
 - [ ] `Test-Path G:\HordeAgent\Engine\Source\Programs\Horde\Horde.sln` — sentinel intact
 - [ ] `G:\HordeAgent\JobDriver\appsettings.json` has `"Driver": { "Executor": "Local" }`
 - [ ] Stream template `arguments` include `-NoP4`
-- [ ] Server answering on `:13340`; agent shows `online: true` in `/api/v1/agents`
+- [ ] Server answering on `:13340`
+- [ ] **Agent process running** (`dotnet G:\HordeAgent\HordeAgent.dll`) and shows `online: true` in
+  `/api/v1/agents` — it does NOT autostart; the box rebooting drops it.
+- [ ] **p4d up on `:1666`** (`.\perforce\scripts\start-p4d.ps1`; verify `p4 -p localhost:1666 info`).
+  **Non-obvious but mandatory:** Horde validates the stream's Perforce cluster *during lease
+  assignment*, so with p4d down every lease is created-then-cancelled in a tight loop — the job sits
+  `Waiting` forever with the agent online and idle, and the server log spams
+  *"Unable to find any healthy Perforce server in cluster Default"* → *"Unable to assign lease,
+  cancelling"*. LocalExecutor never syncs p4, but the **server** still needs the cluster reachable.
+  (Bit us 2026-06-13 after a reboot; the prior session never rebooted between standing p4d up and the run.)

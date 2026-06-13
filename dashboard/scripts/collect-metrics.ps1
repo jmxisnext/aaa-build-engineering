@@ -83,9 +83,11 @@ function ConvertFrom-UnrealMetrics {
     if (-not $Metrics) { return $null }
     $order = 'compile','cook','package','buildgraph'
     $stages = foreach ($step in $order) {
-        $latest = $Metrics |
-            Where-Object { $_.step -eq $step -and -not $_.listOnly } |   # skip list-only buildgraph dry-runs
-            Sort-Object { [datetime]$_.utc } | Select-Object -Last 1
+        $candidates = $Metrics | Where-Object { $_.step -eq $step -and -not $_.listOnly }   # skip list-only buildgraph dry-runs
+        # The canonical pipeline baseline is the TeamCity/wrapper path; the Horde run is a
+        # separate orchestrator shown in $orchestrators, so it must not displace the baseline row.
+        if ($step -eq 'buildgraph') { $candidates = $candidates | Where-Object { ([string]$_.source) -ne 'horde' } }
+        $latest = $candidates | Sort-Object { [datetime]$_.utc } | Select-Object -Last 1
         if ($latest) {
             [pscustomobject]@{ step = $latest.step; target = $latest.target; durationSec = $latest.durationSec; utc = $latest.utc }
         }
@@ -95,8 +97,21 @@ function ConvertFrom-UnrealMetrics {
         [pscustomobject]@{ changelist = $st.changelist; changelistSource = $st.changelistSource
             p4Changelist = $st.p4Changelist; engineChangelist = $st.engineChangelist; source = $st.source; utc = $st.utc }
     } else { $null }
+    # Orchestrator parity: latest non-list-only buildgraph per source -- the "same graph under
+    # both runners" feed. An absent source IS the TeamCity/wrapper path (the buildgraph run and
+    # the teamcity stamp share a utc). Sorted chronologically so the baseline reads first.
+    $orchestrators = @(
+        $Metrics |
+            Where-Object { $_.step -eq 'buildgraph' -and -not $_.listOnly } |
+            Group-Object { if ([string]$_.source) { [string]$_.source } else { 'teamcity' } } |
+            ForEach-Object {
+                $latest = $_.Group | Sort-Object { [datetime]$_.utc } | Select-Object -Last 1
+                [pscustomobject]@{ source = $_.Name; target = $latest.target; durationSec = $latest.durationSec; success = [bool]$latest.success; utc = $latest.utc }
+            } |
+            Sort-Object { [datetime]$_.utc }
+    )
     if (-not @($stages).Count -and -not $stamp) { return $null }
-    [pscustomobject]@{ stale = $false; stages = @($stages); stamp = $stamp }
+    [pscustomobject]@{ stale = $false; stages = @($stages); stamp = $stamp; orchestrators = $orchestrators }
 }
 
 function Get-UnrealFeed {

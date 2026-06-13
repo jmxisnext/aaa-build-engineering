@@ -130,6 +130,22 @@ function Get-DashboardHtml {
     $uProv   = if ($stamp) { " &middot; stamp <b>CL $(ConvertTo-HtmlText $stamp.changelist)</b> ($(ConvertTo-HtmlText $stamp.changelistSource) &middot; via $(ConvertTo-HtmlText $stamp.source)) &middot; engine CL $(ConvertTo-HtmlText $stamp.engineChangelist)" } else { "" }
     $uChip   = if ($stamp) { " &middot; unreal <b>CL $(ConvertTo-HtmlText $stamp.changelist)</b>$uStale" } else { "" }
 
+    # orchestrator parity (Track 4, Step 5): the same graph run under TeamCity and Horde
+    $orch = @($u.orchestrators)
+    $orchRows = foreach ($o in $orch) {
+        $when   = try { ([datetime]$o.utc).ToString('MM-dd HH:mm') } catch { ConvertTo-HtmlText $o.utc }
+        $ok     = if ($o.success) { 'OK' } else { 'X' }
+        $cssRow = if ($o.success) { 'row-ok' } else { 'row-fail' }
+        "<tr class='$cssRow'><td>$(ConvertTo-HtmlText $o.source)</td><td>$(ConvertTo-HtmlText $o.target)</td>" +
+        "<td class='num'>$([math]::Round([double]$o.durationSec,1))s</td><td>$ok</td><td>$when</td></tr>"
+    }
+    $orchHtml = if ($orch.Count) {
+        "<h2 style='margin-top:16px'>Orchestrator parity &mdash; Horde vs TeamCity</h2>" +
+        "<table><thead><tr><th>orchestrator</th><th>graph</th><th>end-to-end</th><th>ok</th><th>when</th></tr></thead>" +
+        "<tbody>$($orchRows -join "`n")</tbody></table>" +
+        "<p class='note'>Same unmodified <code>lyra-pipeline.xml</code> driven by both orchestrators &mdash; graph portability, not a speed race (the Horde cook was cold-DDC; the TeamCity baseline above is warm).</p>"
+    } else { "" }
+
     $gen = ConvertTo-HtmlText $Snapshot.generatedUtc
 
 @"
@@ -171,6 +187,7 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 <table><thead><tr><th>stage</th><th>target</th><th>dur</th><th>when</th></tr></thead>
 <tbody>$($uRows -join "`n")</tbody></table>
 <p class='note'>cook = cold-DDC baseline (one-time, full shader compile, ~24&nbsp;min); compile/package/BuildGraph are warm/incremental. BuildGraph runs compile&rarr;cook&rarr;package as one graph; stamp writes the CL provenance into the package + a CL-named sidecar.</p>
+$orchHtml
 </div>
 
 <div class='cols'>

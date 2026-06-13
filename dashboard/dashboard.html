@@ -61,6 +61,8 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 <tr><td>package</td><td>LyraGame</td><td class='num'>90.5s</td><td>06-05 00:19</td></tr>
 <tr><td>buildgraph</td><td>Lyra Pipeline</td><td class='num'>62.2s</td><td>06-05 02:32</td></tr></tbody></table>
 <p class='note'>cook = cold-DDC baseline (one-time, full shader compile, ~24&nbsp;min); compile/package/BuildGraph are warm/incremental. BuildGraph runs compile&rarr;cook&rarr;package as one graph; stamp writes the CL provenance into the package + a CL-named sidecar.</p>
+<h2 style='margin-top:16px'>Orchestrator parity &mdash; Horde vs TeamCity</h2><table><thead><tr><th>orchestrator</th><th>graph</th><th>end-to-end</th><th>ok</th><th>when</th></tr></thead><tbody><tr class='row-ok'><td>teamcity</td><td>Lyra Pipeline</td><td class='num'>62.2s</td><td>OK</td><td>06-05 02:32</td></tr>
+<tr class='row-ok'><td>horde</td><td>Lyra Pipeline</td><td class='num'>1711s</td><td>OK</td><td>06-13 19:11</td></tr></tbody></table><p class='note'>Same unmodified <code>lyra-pipeline.xml</code> driven by both orchestrators &mdash; graph portability, not a speed race (the Horde cook was cold-DDC; the TeamCity baseline above is warm).</p>
 </div>
 
 <div class='cols'>
@@ -79,5 +81,5 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 </div>
 </div>
 
-<footer>generated 06/05/2026 03:05:36 &middot; CI &rarr; TeamCity REST &middot; accel &rarr; bench -Json &middot; perforce &rarr; p4 streams/triggers &middot; unreal &rarr; .metrics &middot; self-contained, no external requests</footer>
+<footer>generated 06/13/2026 19:11:54 &middot; CI &rarr; TeamCity REST &middot; accel &rarr; bench -Json &middot; perforce &rarr; p4 streams/triggers &middot; unreal &rarr; .metrics &middot; self-contained, no external requests</footer>
 </div></body></html>

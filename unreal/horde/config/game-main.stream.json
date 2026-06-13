@@ -34,7 +34,7 @@
 		{
 			"id": "lyra-buildgraph",
 			"name": "Lyra BuildGraph (installed engine)",
-			"description": "Runs the unmodified unreal/buildgraph/lyra-pipeline.xml from the repo working tree against the installed UE 5.6 + Lyra on this box. Default target is the single Compile node (smallest slice); select the full pipeline via the Target parameter.",
+			"description": "Runs the unmodified unreal/buildgraph/lyra-pipeline.xml from the repo working tree against the installed UE 5.6 + Lyra on this box. Default target is the full Lyra Pipeline (compile-cook-package); select the single Compile node (smallest slice) via the Target parameter.",
 			"arguments": [
 				"-Script=J:\\jammers-lab\\aaa-build-engineering\\unreal\\buildgraph\\lyra-pipeline.xml",
 				"-set:ProjectPath=G:\\UnrealProjects\\LyraStarterGame\\Lyra.uproject",
@@ -49,12 +49,12 @@
 					"items": [
 						{
 							"text": "Compile Lyra Editor",
-							"argumentIfEnabled": "-Target=Compile Lyra Editor",
-							"default": true
+							"argumentIfEnabled": "-Target=Compile Lyra Editor"
 						},
 						{
 							"text": "Lyra Pipeline (full compile-cook-package)",
-							"argumentIfEnabled": "-Target=Lyra Pipeline"
+							"argumentIfEnabled": "-Target=Lyra Pipeline",
+							"default": true
 						}
 					]
 				}

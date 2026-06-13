@@ -40,6 +40,10 @@
       {"step":"package","target":"LyraGame","durationSec":90.5,"utc":"2026-06-05T00:19:27Z"},
       {"step":"buildgraph","target":"Lyra Pipeline","durationSec":62.2,"utc":"2026-06-05T02:32:49Z"}
     ],
-    "stamp": {"changelist":"51","changelistSource":"p4","p4Changelist":"51","engineChangelist":"44394996","source":"teamcity","utc":"2026-06-05T02:32:49Z"}
+    "stamp": {"changelist":"51","changelistSource":"p4","p4Changelist":"51","engineChangelist":"44394996","source":"teamcity","utc":"2026-06-05T02:32:49Z"},
+    "orchestrators": [
+      {"source":"teamcity","target":"Lyra Pipeline","durationSec":62.2,"success":true,"utc":"2026-06-05T02:32:49Z"},
+      {"source":"horde","target":"Lyra Pipeline","durationSec":1711.0,"success":true,"utc":"2026-06-13T19:11:54Z"}
+    ]
   }
 }

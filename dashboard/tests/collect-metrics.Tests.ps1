@@ -36,8 +36,9 @@ Assert-Equal 3 @($merged.builds).Count 'fallback reuses prior builds'
 # ConvertFrom-UnrealMetrics: latest-per-step duration stages + stamp provenance
 $um = @(
   [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=70.0;   success=$true; utc='2026-06-05T01:00:00Z' }
-  [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=62.2;   success=$true; utc='2026-06-05T02:32:49Z' }  # newer -> wins
+  [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=62.2;   success=$true; utc='2026-06-05T02:32:49Z' }  # newer teamcity-path -> wins its source
   [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=0.5; listOnly=$true; success=$true; utc='2026-06-05T03:00:00Z' }  # list-only -> ignored
+  [pscustomobject]@{ track='unreal'; step='buildgraph'; target='Lyra Pipeline'; durationSec=1711.0; source='horde'; success=$true; utc='2026-06-13T19:11:54Z' }  # ran under Horde
   [pscustomobject]@{ track='unreal'; step='compile';    target='LyraEditor';    durationSec=83.9;   success=$true; utc='2026-06-04T23:27:09Z' }
   [pscustomobject]@{ track='unreal'; step='cook';       target='Lyra';          durationSec=1432.0; success=$true; utc='2026-06-05T00:11:51Z' }
   [pscustomobject]@{ track='unreal'; step='package';    target='LyraGame';      durationSec=90.5;   success=$true; utc='2026-06-05T00:19:27Z' }
@@ -47,10 +48,19 @@ $uf = ConvertFrom-UnrealMetrics -Metrics $um
 Assert-Equal 4    @($uf.stages).Count                                'four duration stages (compile/cook/package/buildgraph)'
 $bg = @($uf.stages | Where-Object { $_.step -eq 'buildgraph' })
 Assert-Equal 1    $bg.Count                                          'one buildgraph stage (latest-per-step dedup)'
-Assert-Equal 62.2 $bg[0].durationSec                                 'keeps the NEWEST non-list-only buildgraph run'
+Assert-Equal 62.2 $bg[0].durationSec                                 'stages buildgraph = newest TeamCity-path run (Horde excluded from the canonical baseline)'
 Assert-Equal '51' $uf.stamp.changelist                              'extracts the stamp changelist'
 Assert-Equal 'teamcity' $uf.stamp.source                            'extracts the stamp source'
 Assert-Equal '44394996' $uf.stamp.engineChangelist                 'extracts the engine changelist'
+
+# orchestrators: latest buildgraph per source (absent source -> 'teamcity'), the Horde-vs-TeamCity parity feed
+$orch = @($uf.orchestrators)
+Assert-Equal 2 $orch.Count                                          'two orchestrators (teamcity + horde)'
+Assert-Equal 'teamcity' $orch[0].source                            'orchestrators sorted chronologically: TeamCity (baseline) first'
+Assert-Equal 62.2 $orch[0].durationSec                             'teamcity orchestrator = newest non-list-only teamcity-path buildgraph'
+Assert-Equal 'horde'    $orch[1].source                            'Horde orchestrator second'
+Assert-Equal 1711.0 $orch[1].durationSec                           'horde orchestrator = the Horde job end-to-end duration'
+Assert-True  ([bool]$orch[1].success)                               'horde orchestrator carries success'
 
 # Merge-Feed stale-fallback applies to the unreal section too
 $priorU = [pscustomobject]@{ stale=$false; stages=@(1,2,3,4); stamp=[pscustomobject]@{ changelist='44' } }
