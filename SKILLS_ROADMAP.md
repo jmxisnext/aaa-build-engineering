@@ -1,6 +1,6 @@
 # Skills Roadmap — Build Engineer practice
 
-> **Next-phase sequencing, the 2026 landscape update, the workload tier, and hardware reality live in [`ROADMAP_NEXT.md`](ROADMAP_NEXT.md).** This file remains the original 5-track definition.
+> **Next-phase sequencing, the 2026 landscape update, the workload tier, and hardware reality live in [`ROADMAP_NEXT.md`](ROADMAP_NEXT.md).** This file is the **original 5-track definition — kept as the source spec, but some steps below are superseded**: Track 2's "small dashboard page" was subsumed by the cross-track `dashboard/`, and the Lyra/Horde work (Track 4) runs on a **native Windows agent**, not only Docker. **See `ROADMAP_NEXT.md` for what actually shipped.**
 
 Five tracks. Each track produces one concrete artifact you can demo or reference in an interview. Tracks are sequenced so later ones can reuse earlier infrastructure (e.g., track 2 builds the project that track 1 puts in Perforce).
 

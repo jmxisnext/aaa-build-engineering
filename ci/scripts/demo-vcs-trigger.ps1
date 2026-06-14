@@ -6,11 +6,11 @@
 .DESCRIPTION
   Case A (allowed): submit as allowlisted build-svc through the broker :1667
     -> broker PASS -> change-commit hook -> chain fires within -FireTimeoutSec, green.
-  Case B (frozen-out): submit as non-allowlisted james through :1667
+  Case B (frozen-out): submit as non-allowlisted devuser through :1667
     -> broker REJECT -> no changelist lands, no build within -NoFireWindowSec.
 
   Admin setup (creating users/clients, seeding the heartbeat file) goes DIRECT
-  to p4d :1666 as super james. Only the two TESTED submits go through the broker.
+  to p4d :1666 as super devuser. Only the two TESTED submits go through the broker.
 #>
 param(
     [string]$Token,
@@ -20,7 +20,7 @@ param(
     [string]$Broker     = "localhost:1667",
     [string]$Stream     = "//game/main",
     [string]$AllowUser  = "build-svc",
-    [string]$DenyUser   = "james",
+    [string]$DenyUser   = "devuser",
     [string]$WsRoot     = "C:\PerforceSandbox\ws",
     [int]$FireTimeoutSec  = 90,
     [int]$NoFireWindowSec = 30
@@ -63,11 +63,11 @@ function Wait-NewBuild([int]$Baseline, [int]$TimeoutSec) {
     return $null
 }
 
-# ---------- admin setup (direct to p4d as super james) ----------
+# ---------- admin setup (direct to p4d as super devuser) ----------
 function Ensure-Identities {
     # Ensure build-svc user exists (may already exist from earlier tasks).
     "User: $AllowUser`nEmail: $AllowUser@example.invalid`nFullName: Build Service Account`n" |
-        & p4 -p $P4d -u james user -f -i | Out-Null
+        & p4 -p $P4d -u devuser user -f -i | Out-Null
 
     foreach ($pair in @(@($AllowUser, "$AllowUser-ws"), @($DenyUser, "$DenyUser-ws"))) {
         $owner = $pair[0]; $client = $pair[1]
@@ -78,14 +78,14 @@ function Ensure-Identities {
         # a prior task that created build-svc-ws with a View: mapping), delete
         # it first.  A client with both View: and Stream: is invalid; creating
         # fresh avoids that conflict.  Super user can delete any client.
-        $existing = & p4 -p $P4d -u james clients -e $client 2>$null
+        $existing = & p4 -p $P4d -u devuser clients -e $client 2>$null
         if ($existing) {
-            & p4 -p $P4d -u james client -d -f $client | Out-Null
+            & p4 -p $P4d -u devuser client -d -f $client | Out-Null
             Write-Host "[setup] deleted stale client $client" -ForegroundColor DarkGray
         }
 
         "Client: $client`nOwner: $owner`nRoot: $root`nStream: $Stream`n" |
-            & p4 -p $P4d -u james client -i | Out-Null
+            & p4 -p $P4d -u devuser client -i | Out-Null
     }
     Write-Host "[setup] identities + clients ready" -ForegroundColor DarkGray
 }
@@ -93,14 +93,14 @@ function Ensure-Heartbeat {
     # Explicit -p/-u/-c (no $env: mutation) so a failure here can't leak port/user
     # state into the test cases below. Seeds direct to p4d, bypassing the freeze.
     $client = "$DenyUser-ws"
-    if (-not (& p4 -p $P4d -u james -c $client files "$Stream/ci-demo/heartbeat.txt" 2>$null)) {
+    if (-not (& p4 -p $P4d -u devuser -c $client files "$Stream/ci-demo/heartbeat.txt" 2>$null)) {
         $root = Join-Path $WsRoot $DenyUser
-        & p4 -p $P4d -u james -c $client sync -q "$Stream/..." 2>$null | Out-Null
+        & p4 -p $P4d -u devuser -c $client sync -q "$Stream/..." 2>$null | Out-Null
         $path = Join-Path $root "ci-demo\heartbeat.txt"
         New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
         Set-Content -Path $path -Value "seed"
-        & p4 -p $P4d -u james -c $client add $path | Out-Null
-        & p4 -p $P4d -u james -c $client submit -d "ci-demo: seed heartbeat" | Out-Null
+        & p4 -p $P4d -u devuser -c $client add $path | Out-Null
+        & p4 -p $P4d -u devuser -c $client submit -d "ci-demo: seed heartbeat" | Out-Null
         Write-Host "[setup] seeded $Stream/ci-demo/heartbeat.txt" -ForegroundColor DarkGray
     }
 }
@@ -127,7 +127,7 @@ function Invoke-CaseA {
 function Invoke-CaseB {
     Write-Host "`n== Case B: frozen-out submit fires nothing ==" -ForegroundColor Cyan
     $baseline = Get-LatestPackageId
-    $before = (& p4 -p $P4d -u james changes -m1 "$Stream/ci-demo/heartbeat.txt") -join ""
+    $before = (& p4 -p $P4d -u devuser changes -m1 "$Stream/ci-demo/heartbeat.txt") -join ""
     $env:P4PORT = $Broker; $env:P4USER = $DenyUser; $env:P4CLIENT = "$DenyUser-ws"
     & p4 sync -q "$Stream/ci-demo/heartbeat.txt" | Out-Null
     & p4 edit "$Stream/ci-demo/heartbeat.txt" | Out-Null
@@ -137,7 +137,7 @@ function Invoke-CaseB {
     & p4 revert "$Stream/ci-demo/heartbeat.txt" | Out-Null    # clean the workspace either way
     if (-not $rejected) { Write-Host "  FAIL: frozen-out submit SUCCEEDED (broker did not block)" -ForegroundColor Red; return $false }
     if ($out -notmatch 'freeze|broker|reject') { Write-Host "  WARN: submit failed but message wasn't clearly a broker reject:`n$out" -ForegroundColor Yellow }
-    $after = (& p4 -p $P4d -u james changes -m1 "$Stream/ci-demo/heartbeat.txt") -join ""
+    $after = (& p4 -p $P4d -u devuser changes -m1 "$Stream/ci-demo/heartbeat.txt") -join ""
     if ($after -ne $before) { Write-Host "  FAIL: a changelist landed despite the freeze" -ForegroundColor Red; return $false }
     Write-Host "  rejected as expected; watching ${NoFireWindowSec}s to confirm no build..."
     $b = Wait-NewBuild $baseline $NoFireWindowSec

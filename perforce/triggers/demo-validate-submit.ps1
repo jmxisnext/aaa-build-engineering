@@ -34,7 +34,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $env:P4PORT = "localhost:1666"
-$env:P4USER = "james"
+$env:P4USER = "devuser"
 
 $DEV_CLIENT = "validate-demo-dev"
 $TP_CLIENT  = "validate-demo-tp"
@@ -71,7 +71,7 @@ try {
 
     @"
 Client: $DEV_CLIENT
-Owner: james
+Owner: devuser
 Root: $DEV_ROOT
 Options: noallwrite noclobber nocompress unlocked nomodtime normdir
 SubmitOptions: submitunchanged
@@ -82,7 +82,7 @@ Stream: //game/dev
 
     @"
 Client: $TP_CLIENT
-Owner: james
+Owner: devuser
 Root: $TP_ROOT
 Options: noallwrite noclobber nocompress unlocked nomodtime normdir
 SubmitOptions: submitunchanged

@@ -190,7 +190,7 @@ function Ensure-VcsRootDefinition {
         project = @{ id = $ProjectId }
         properties = @{ property = @(
             @{ name = "port";              value = "host.docker.internal:1667" }
-            @{ name = "user";              value = "james" }
+            @{ name = "user";              value = "devuser" }
             @{ name = "use-client";        value = "stream" }
             @{ name = "stream";            value = "//game/main" }
             @{ name = "p4-exe";            value = "p4" }

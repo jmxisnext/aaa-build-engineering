@@ -39,6 +39,13 @@ pwsh -File unreal/scripts/check-prereqs.ps1
 | **Unreal Engine 5.x** (~115 GB) | Epic Games Launcher → *Unreal Engine* → install (recommend latest stable, e.g. **5.6**) **to `G:\`**. Requires Epic login. |
 | **Lyra Starter Game** (~25 GB) | Launcher → *Samples* / *Learn* → **Lyra Starter Game** → *Create Project* (match the engine version) → install **to `G:\`**. Requires Epic login. |
 
+> **MSVC toolset note:** VS2022 17.14 ships **MSVC 14.44**, but UE 5.6 prefers/validates **14.38**.
+> 14.44 has linked Lyra fine so far, but a too-new toolset can surface PCH/codegen errors on heavier
+> builds — and lesson #1 was a PCH virtual-memory failure on this very toolchain. If a later
+> cook / Shipping / clean build hits odd C++ errors, install the 14.38 toolset (VS Installer →
+> Individual components → "MSVC v143 — VS2022 C++ x64/x86 build tools (v14.38)") and let UBT pick
+> it before chasing the code.
+
 ## Drive plan (RAM is the binding ceiling — serialize heavy stacks)
 
 - **UE5 engine + Lyra project + installs-to-keep → `G:\` (NVME_DURABLE, NVMe).**

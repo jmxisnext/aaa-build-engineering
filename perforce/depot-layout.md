@@ -121,8 +121,8 @@ Ignored:
 Workspace names follow `username-machine-stream`:
 
 ```
-james-WS01-game-main
-james-WS01-game-feature-shotmeter
+devuser-WS01-game-main
+devuser-WS01-game-feature-shotmeter
 buildbot-CI01-game-main
 buildbot-CI01-engine-main
 ```

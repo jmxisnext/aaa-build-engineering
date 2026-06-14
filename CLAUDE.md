@@ -6,4 +6,4 @@ Skill ladder for AAA build / databuild engineering roles. Operating principle (f
 
 - Every track's success criterion is a **demoable artifact** ("I built this, here's why"). Define that artifact before starting the track; loop until it runs / demos.
 - Bias to building. If you catch yourself producing notes or research instead of a runnable artifact, stop and build the smallest version that runs.
-- Keep tracks isolated in their subdir (`perforce/`, `ci/`, `accel/`, `unreal/`, `pipeline/`). Don't let one track's work bleed into another's.
+- Keep tracks isolated in their subdir (`perforce/`, `ci/`, `accel/`, `unreal/`; `pipeline/` is Track 5 — planned, not yet created). Don't let one track's work bleed into another's.

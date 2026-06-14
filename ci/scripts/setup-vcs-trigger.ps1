@@ -14,7 +14,7 @@ param(
     [string]$HookUser     = "ci-hook",
     [string]$TokenName    = "p4-commit-hook",
     [string]$P4Port       = "localhost:1666",
-    [string]$P4User       = "james",
+    [string]$P4User       = "devuser",
     [string]$TriggerHome  = "C:\PerforceSandbox\triggers",
     [string]$RepoTriggers = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\perforce\triggers')),
     [string]$NotifyScript = "C:\PerforceSandbox\triggers\notify-teamcity.ps1"   # the DEPLOYED path

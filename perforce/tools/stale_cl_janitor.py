@@ -120,7 +120,7 @@ def shelve_and_revert(p4: P4, change: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", default="localhost:1666")
-    ap.add_argument("--user", default="james", help="P4USER for the janitor session")
+    ap.add_argument("--user", default="devuser", help="P4USER for the janitor session")
     ap.add_argument("--days", type=float, default=7.0, help="age threshold")
     ap.add_argument("--user-filter", default=None, help="only janitor CLs owned by this user")
     ap.add_argument("--apply", action="store_true", help="actually shelve+revert (default is dry-run)")

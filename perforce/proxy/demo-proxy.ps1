@@ -35,7 +35,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$env:P4USER = "james"
+$env:P4USER = "devuser"
 
 if (-not (Test-Path "C:\PerforceSandbox\bin\p4p.exe")) {
     Write-Host "p4p.exe is not installed yet — the proxy binary download is the one" -ForegroundColor Yellow
@@ -58,7 +58,7 @@ function New-StreamClient([string]$name, [string]$root, [string]$stream, [string
     New-Item -ItemType Directory -Path $root -Force | Out-Null
     @"
 Client: $name
-Owner: james
+Owner: devuser
 Root: $root
 Options: noallwrite noclobber nocompress unlocked nomodtime normdir
 SubmitOptions: submitunchanged

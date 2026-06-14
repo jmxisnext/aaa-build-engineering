@@ -10,7 +10,7 @@ if (-not $running) {
 }
 
 $env:P4PORT = "localhost:1666"
-$env:P4USER = "james"
+$env:P4USER = "devuser"
 
 try {
     & p4 admin stop 2>&1 | Out-String | Write-Output

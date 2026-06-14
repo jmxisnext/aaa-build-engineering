@@ -21,6 +21,7 @@ That's how studios actually wire CI: through the policy layer, not around it.
 | `scripts/setup-vcs-trigger.ps1` | Idempotent installer: durable token + VCS trigger + p4d change-commit trigger (instant CI) |
 | `scripts/demo-vcs-trigger.ps1` | Policy-gated end-to-end proof: allowlisted submit fires the chain, frozen-out submit doesn't |
 | `scripts/notify-build-failure.ps1` | Build-failure notifier: writes a record per FAILED chain build (config, build #, **P4 changelist**, reason, URL) to `data/notifications/failures.log` |
+| `scripts/bootstrap-lyra.ps1` | Idempotent REST provision of `AAASandbox_LyraPipeline` — the **Track-4 Lyra BuildGraph** (compile→cook→package) + CL stamp, pinned to a **native Windows agent** (see "Lyra pipeline (Windows agent)" below) |
 | `lessons-learned.md` | Track 2 incident log (same pattern as `perforce/lessons-learned.md`) |
 
 ## Version-stamped packages (P4 changelist provenance)
@@ -115,7 +116,7 @@ shape is:
 |---|---|
 | Type | Perforce Helix Core |
 | Port | `host.docker.internal:1667` (polled through the broker) |
-| User | `james` |
+| User | `devuser` |
 | Workspace | **Stream** `//game/main` (`use-client=stream`) — not a client mapping |
 | Use ticket-based auth | (no auth required in this sandbox) |
 
@@ -212,7 +213,7 @@ pwsh -File .\scripts\demo-vcs-trigger.ps1
 
 - **Case A:** an allowlisted `build-svc` submit through the broker `:1667` fires
   the chain within ~90s, green.
-- **Case B:** a frozen-out `james` submit through `:1667` is rejected by the broker —
+- **Case B:** a frozen-out `devuser` submit through `:1667` is rejected by the broker —
   no changelist lands, no build fires.
 
 That A/B is the Track 1 ↔ Track 2 tie made concrete: **CI runs exactly on the
@@ -222,13 +223,38 @@ never block a submit (it just falls back to TeamCity's next scheduled poll).
 Loop-safety: the chain emits artifacts, it never submits back to `//game/main` —
 see `perforce/triggers/README.md`.
 
+## Lyra pipeline (Windows agent)
+
+Track 4 (Unreal) drives a real game — **Lyra** — through compile → cook → package as a
+**BuildGraph**, run *from this same TeamCity server*. Because the Linux Docker agents can't
+build Unreal, this pipeline runs on a **native Windows agent** installed on the host (UE 5.6
+on `G:\` + VS2022 + these repo scripts on disk). The Linux agents stay for the C++ chain.
+
+`scripts/bootstrap-lyra.ps1` idempotently provisions the `AAASandbox_LyraPipeline` build
+config — kept separate from the C++ `bootstrap-builds.ps1` chain because it's one BuildGraph
+(not a 4-config DAG) and is pinned to a Windows agent. The config:
+
+- attaches the existing Perforce stream root in **MANUAL checkout** mode — the agent doesn't
+  sync the sample stream (it builds Lyra from `G:\`); it only needs `%build.vcs.number%` to stamp;
+- runs `unreal/scripts/buildgraph-lyra.ps1` (Compile → Cook → Package) then
+  `unreal/scripts/stamp-lyra-package.ps1` (CL stamp) on one inline step;
+- publishes the package's `build-info.json` + the CL-named sidecar as artifacts.
+
+```powershell
+pwsh -File .\scripts\bootstrap-lyra.ps1            # provision (idempotent)
+pwsh -File .\scripts\bootstrap-lyra.ps1 -DryRun    # print planned REST calls, send nothing
+```
+
+The headline artifact: **a BuildGraph executed from CI, emitting a Perforce-changelist-stamped
+Lyra build.** The Windows-agent bring-up itself is the one partly-manual infra piece (install the
+agent, stage a portable JRE, point pwsh Core, authorize) — see `lessons-learned.md` #14.
+
 ## What this stack does not do yet
 
 - No external DB (HSQLDB only — sandbox-tier).
-- Two Linux agents, no native Windows agent yet. C++ MSBuild work on Windows
-  will need a separate native Windows agent registered against the same
-  server (deferred — the current chain builds the C++ seed with gcc/CMake on
-  Linux).
+- The two Linux Docker agents build the C++ sample chain (gcc/CMake) and **cannot build
+  Unreal / Windows-native targets** — Track 4's Lyra pipeline therefore runs on a separate
+  **native Windows agent** (see "Lyra pipeline (Windows agent)" above).
 - Post-commit CI only — a submit fires the chain *after* it lands. The next lever
   is **pre-flight / gated builds** (TeamCity's Perforce Shelve Trigger → personal
   builds on shelved changelists) so broken changes are caught *before* they hit

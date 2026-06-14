@@ -23,8 +23,9 @@ dashboard shipped** — foundation-first (Track 4 → Horde → Track 5 → Caps
   (adequate).
 - **Track 3 (accel) — mechanics complete, every lever measured** (`/MP` ~4.0×, unity, a
   PCH hypothesis tested *and refuted* with `/Bt+`, FASTBuild cache 14.4×, linker
-  `/INCREMENTAL` + `/LTCG` 269× + symbol-bloat sweep). **Weakness: synthetic 32-TU fixture**
-  → can't say "I cut a real 25-min build." Fix = adopt a real codebase (workload tier).
+  `/INCREMENTAL` + `/LTCG` 269× + symbol-bloat sweep). **Synthetic 32-TU fixture weakness CLOSED**
+  (`a2504ff`, 2026-06-04): the real **bgfx renderer-core** workload was adopted, giving honest
+  before/after on recognizable code (lever ranking flipped — `/MP` 4.64× > unity 3.86×).
 
 Net: tracks 1–3 are interview-demoable today; what's left is polish / gap-closing, not deep work.
 
@@ -99,6 +100,10 @@ Ryzen 7 7800X3D (8c/16t) · 31 GB RAM · **RTX 3060 12 GB** · F: 2.8 TB free.
    blocks session-authed writes), tarball-staleness fix, instant-CI restored. Lessons #10–12.
 3. **Finalize Track 3** — adopt **bgfx `examples/common`** → real before/after numbers;
    `/d2cgsummary` snippet; single-file-edit compile timing. [~1 day] — *workload tier injection #1*
+   → **2026-06-04: DONE.** ✅ Real **bgfx renderer-core** workload adopted (`a2504ff`), replacing the
+   synthetic 32-TU fixture; honest before/after across `/MP` · unity · linker · FASTBuild, with the
+   lever ranking **re-measured on real code** (`/MP` 4.64× > unity 3.86× — the *opposite* of the
+   fixture's ranking). The "can't say I cut a real build" weakness is closed.
 4. **Build the dashboard** — aggregate the three finished tracks: CI builds + version/CL stamps +
    duration/status trends, FASTBuild/bgfx cache-hit & accel numbers; honest about overhead-bound
    parallelism. Closes Track 2's roadmap dashboard **and** is the #1 cross-portfolio differentiator.
@@ -131,7 +136,7 @@ artifact, then layer the differentiator onto the same graph.
 - Hardware: GPU fine (3060 12 GB runs the Lyra editor); RAM 31 GB is the ceiling — **serialize**
   (don't run UE + TeamCity + Docker heavy at once). Source on J:, UE+Lyra on G:, DDC/scratch on D:.
 
-**Step 2 (IN PROGRESS — full pipeline + dashboard ✅, CL-stamp parity remaining) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
+**Step 2 (full pipeline + dashboard ✅ — CL-stamp parity the one remaining gap) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
 - **Demoable artifact (the win condition):** a local **Horde Server + one agent** runs the
   **unmodified** `unreal/buildgraph/lyra-pipeline.xml` and produces the **same CL-version-stamped
   package + `.metrics`** the TeamCity path already produces — and the **dashboard shows a Horde run
