@@ -57,4 +57,36 @@ $html2 = Get-DashboardHtml -Snapshot $snap
 Assert-Equal $html.Length $html2.Length 'render is deterministic (same length)'
 Assert-True  ($html -ceq $html2)        'render is deterministic (byte-identical)'
 
+# ---- DB-1/DB-6: render is byte-identical across locale + timezone ----
+# The "commit a snapshot, anyone re-renders the same HTML" contract (dashboard/README.md)
+# breaks if the render varies by the host's culture/TZ. The two breakers: date .ToString
+# (calendar cultures shift month/day -- ar-SA is Hijri) and the -f number operator (decimal
+# separator -- de-DE uses a comma). Re-PARSE + re-render the SAME fixture under a non-en-US
+# culture and a non-UTC TZ; bytes must equal the en-US/UTC render. (Re-parse, not just
+# re-render, so ConvertFrom-Json's own date handling is exercised under the foreign locale.)
+function Get-RenderUnder {
+    param([string]$Culture, [string]$Tz, [string]$FixturePath)
+    $oc  = [System.Threading.Thread]::CurrentThread.CurrentCulture
+    $otz = $env:TZ
+    try {
+        $env:TZ = $Tz; [System.TimeZoneInfo]::ClearCachedData()
+        [System.Threading.Thread]::CurrentThread.CurrentCulture = [cultureinfo]::GetCultureInfo($Culture)
+        $s = Get-Content $FixturePath -Raw | ConvertFrom-Json
+        return (Get-DashboardHtml -Snapshot $s)
+    } finally {
+        [System.Threading.Thread]::CurrentThread.CurrentCulture = $oc
+        $env:TZ = $otz; [System.TimeZoneInfo]::ClearCachedData()
+    }
+}
+$fx       = Join-Path $here "..\data\snapshot.fixture.json"
+$baseUtc  = Get-RenderUnder 'en-US' 'UTC'              $fx
+$deRender = Get-RenderUnder 'de-DE' 'Asia/Kolkata'     $fx   # Gregorian, comma decimal, +05:30
+$arRender = Get-RenderUnder 'ar-SA' 'America/New_York' $fx   # Hijri calendar, arabic decimal, -05:00
+Assert-True ($deRender -ceq $baseUtc) 'render is locale-invariant (de-DE/+05:30 == en-US/UTC)'
+Assert-True ($arRender -ceq $baseUtc) 'render is locale-invariant (ar-SA/-05:00 == en-US/UTC)'
+
+# ---- DB-4: accel link levers (full/incremental/ltcg) are rendered ----
+Assert-Match 'linker:' $html 'renders the accel link row'
+Assert-Match '/LTCG'   $html 'renders the LTCG link cost'
+
 Assert-Summary

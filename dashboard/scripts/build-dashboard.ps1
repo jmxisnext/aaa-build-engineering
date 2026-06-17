@@ -86,7 +86,7 @@ function Get-DashboardHtml {
     $rows = foreach ($b in $builds) {
         $cssRow = if ($b.status -eq 'SUCCESS') { 'row-ok' } else { 'row-fail' }
         $icon   = if ($b.status -eq 'SUCCESS') { 'OK' } else { 'X' }
-        $when   = ([datetime]$b.finishUtc).ToString('MM-dd HH:mm')
+        $when   = Format-When $b.finishUtc
         "<tr class='$cssRow'><td>$(ConvertTo-HtmlText $b.config)</td><td class='num'>$($b.number)</td>" +
         "<td class='num'>$($b.cl)</td><td>$icon</td><td>$(ConvertTo-HtmlText $b.statusText)</td>" +
         "<td class='num'>$([math]::Round($b.durationSec,2))s</td><td>$when</td>" +
@@ -96,14 +96,23 @@ function Get-DashboardHtml {
     # accel scorecard bars (speedups vs each lever's baseline)
     $a = $Snapshot.accel
     $accelItems = @()
-    if ($a.compile)   { $accelItems += [pscustomobject]@{ label='/MP';       value=($a.compile.serial / $a.compile.mp);    text=("{0:N1}x" -f ($a.compile.serial / $a.compile.mp)) }
-                        $accelItems += [pscustomobject]@{ label='unity';     value=($a.compile.serial / $a.compile.unity); text=("{0:N1}x" -f ($a.compile.serial / $a.compile.unity)) }
-                        $accelItems += [pscustomobject]@{ label='PCH';       value=($a.compile.serial / $a.compile.pchWarm); text=("{0:N1}x" -f ($a.compile.serial / $a.compile.pchWarm)) } }
-    if ($a.fastbuild) { $accelItems += [pscustomobject]@{ label='FASTBuild'; value=($a.fastbuild.miss / $a.fastbuild.hit); text=("{0:N1}x" -f ($a.fastbuild.miss / $a.fastbuild.hit)) } }
-    if ($a.bgfx)      { $accelItems += [pscustomobject]@{ label='bgfx /MP';  value=($a.bgfx.serial / $a.bgfx.mp);  text=("{0:N1}x (real)" -f ($a.bgfx.serial / $a.bgfx.mp)) }
-                        $accelItems += [pscustomobject]@{ label='bgfx unity'; value=($a.bgfx.serial / $a.bgfx.unity); text=("{0:N1}x (real)" -f ($a.bgfx.serial / $a.bgfx.unity)) } }
+    if ($a.compile)   { $accelItems += [pscustomobject]@{ label='/MP';       value=($a.compile.serial / $a.compile.mp);    text="$(Format-Num ($a.compile.serial / $a.compile.mp))x" }
+                        $accelItems += [pscustomobject]@{ label='unity';     value=($a.compile.serial / $a.compile.unity); text="$(Format-Num ($a.compile.serial / $a.compile.unity))x" }
+                        $accelItems += [pscustomobject]@{ label='PCH';       value=($a.compile.serial / $a.compile.pchWarm); text="$(Format-Num ($a.compile.serial / $a.compile.pchWarm))x" } }
+    if ($a.fastbuild) { $accelItems += [pscustomobject]@{ label='FASTBuild'; value=($a.fastbuild.miss / $a.fastbuild.hit); text="$(Format-Num ($a.fastbuild.miss / $a.fastbuild.hit))x" } }
+    if ($a.bgfx)      { $accelItems += [pscustomobject]@{ label='bgfx /MP';  value=($a.bgfx.serial / $a.bgfx.mp);  text="$(Format-Num ($a.bgfx.serial / $a.bgfx.mp))x (real)" }
+                        $accelItems += [pscustomobject]@{ label='bgfx unity'; value=($a.bgfx.serial / $a.bgfx.unity); text="$(Format-Num ($a.bgfx.serial / $a.bgfx.unity))x (real)" } }
     $accelBars = if ($accelItems.Count) { New-SvgBars -Items $accelItems } else { "<em>no accel metrics captured</em>" }
-    $bgfxIncr = if ($a.bgfx) { "<p class='note'>bgfx single-file edit: per-file $($a.bgfx.trivialEditPerFile)s vs amalgamation $($a.bgfx.trivialEditUnity)s ({0:N0}x)</p>" -f ($a.bgfx.trivialEditUnity / $a.bgfx.trivialEditPerFile) } else { "" }
+    $bgfxIncr = if ($a.bgfx) { "<p class='note'>bgfx single-file edit: per-file $($a.bgfx.trivialEditPerFile)s vs amalgamation $($a.bgfx.trivialEditUnity)s ($(Format-Num ($a.bgfx.trivialEditUnity / $a.bgfx.trivialEditPerFile) 'N0')x)</p>" } else { "" }
+    # DB-4: linker levers (full /INCREMENTAL:NO, +1-edit incremental, /LTCG on /GL objs) -- collected
+    # but previously unrendered. Incremental is the speedup story; /LTCG is the whole-program cost
+    # (the ~269x the roadmap cites = LTCG / full-incremental). Seconds via [string] interp (invariant);
+    # ratios via Format-Num.
+    $linkNote = if ($a.link) {
+        $incrX = Format-Num ($a.link.full / $a.link.incremental)
+        $ltcgX = Format-Num ($a.link.ltcg / $a.link.full) 'N0'
+        "<p class='note'>linker: full $($a.link.full)s &middot; incremental $($a.link.incremental)s (${incrX}x faster) &middot; /LTCG $($a.link.ltcg)s (${ltcgX}x)</p>"
+    } else { "" }
 
     # perforce panel
     $p = $Snapshot.perforce
@@ -121,7 +130,7 @@ function Get-DashboardHtml {
     $uStale = if ($u.stale) { " <span class='stale'>(stale)</span>" } else { "" }
     $uStages = @($u.stages)
     $uRows = foreach ($s in $uStages) {
-        $when = try { ([datetime]$s.utc).ToString('MM-dd HH:mm') } catch { ConvertTo-HtmlText $s.utc }
+        $when = Format-When $s.utc
         "<tr><td>$(ConvertTo-HtmlText $s.step)</td><td>$(ConvertTo-HtmlText $s.target)</td>" +
         "<td class='num'>$([math]::Round([double]$s.durationSec,1))s</td><td>$when</td></tr>"
     }
@@ -134,7 +143,7 @@ function Get-DashboardHtml {
     # orchestrator parity (Track 4, Step 5): the same graph run under TeamCity and Horde
     $orch = @($u.orchestrators)
     $orchRows = foreach ($o in $orch) {
-        $when   = try { ([datetime]$o.utc).ToString('MM-dd HH:mm') } catch { ConvertTo-HtmlText $o.utc }
+        $when   = Format-When $o.utc
         $ok     = if ($o.success) { 'OK' } else { 'X' }
         $cssRow = if ($o.success) { 'row-ok' } else { 'row-fail' }
         "<tr class='$cssRow'><td>$(ConvertTo-HtmlText $o.source)</td><td>$(ConvertTo-HtmlText $o.target)</td>" +
@@ -196,6 +205,7 @@ $orchHtml
 <h2>Accel (Track 3)</h2>
 <div class='svgbox'>$accelBars</div>
 $bgfxIncr
+$linkNote
 <p class='note'>speedups vs each lever's baseline; overhead-bound on 8 physical cores.</p>
 </div>
 <div class='panel'>
