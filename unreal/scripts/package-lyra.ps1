@@ -91,43 +91,21 @@ if ($Clean) {
   if (Test-Path $staged) { Write-Host "Clean  : removing $staged"; Remove-Item $staged -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-$logDir = Join-Path $unrealDir '.logs'
-$metricDir = Join-Path $unrealDir '.metrics'
-New-Item -ItemType Directory -Force -Path $logDir, $metricDir | Out-Null
-$stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-$logFile = Join-Path $logDir "package-Lyra-$Platform-$ClientConfig-$stamp.log"
-
-Write-Host "Log    : $logFile"
-Write-Host 'Starting package (build + stage + pak + archive)...'
-$sw = [System.Diagnostics.Stopwatch]::StartNew()
-& $uat @uatArgs 2>&1 | Tee-Object -FilePath $logFile
-$exit = $LASTEXITCODE
-$sw.Stop()
-$dur = [math]::Round($sw.Elapsed.TotalSeconds, 1)
-
-$metric = [pscustomobject]@{
-  track         = 'unreal'
-  step          = 'package'
-  target        = $Target
-  platform      = $Platform
-  configuration = $ClientConfig
-  clean         = [bool]$Clean
-  archiveDir    = $ArchiveDir
-  success       = ($exit -eq 0)
-  exitCode      = $exit
-  durationSec   = $dur
-  engine        = $EnginePath
-  uproject      = $Uproject
-  utc           = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-}
-$metricFile = Join-Path $metricDir "package-Lyra-$Platform-$ClientConfig-$stamp.json"
-$metric | ConvertTo-Json | Set-Content -Path $metricFile -Encoding UTF8
+$step = Invoke-TimedBuildStep -Step 'package' -UnrealDir $unrealDir `
+  -BaseName "package-Lyra-$Platform-$ClientConfig" -Engine $EnginePath -Uproject $Uproject `
+  -StartMessage 'Starting package (build + stage + pak + archive)...' `
+  -Metric ([ordered]@{
+    target = $Target; platform = $Platform; configuration = $ClientConfig
+    clean  = [bool]$Clean; archiveDir = $ArchiveDir
+  }) `
+  -Action { param($LogFile) & $uat @uatArgs 2>&1 | Tee-Object -FilePath $LogFile }
+$exit = $step.Exit; $dur = $step.DurationSec
 
 Write-Host ''
 if ($exit -eq 0) {
   Write-Host "PACKAGE SUCCEEDED - $Target $Platform $ClientConfig in ${dur}s -> $ArchiveDir" -ForegroundColor Green
 } else {
-  Write-Host "PACKAGE FAILED (exit $exit) after ${dur}s - see $logFile" -ForegroundColor Red
+  Write-Host "PACKAGE FAILED (exit $exit) after ${dur}s - see $($step.LogFile)" -ForegroundColor Red
 }
-Write-Host "metric: $metricFile"
+Write-Host "metric: $($step.MetricFile)"
 exit $exit

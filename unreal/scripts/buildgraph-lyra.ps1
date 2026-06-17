@@ -64,42 +64,19 @@ if ($DryRun) { Write-Host 'DryRun - not invoking RunUAT.'; exit 0 }
 New-Item -ItemType Directory -Force -Path $DDCPath | Out-Null
 ${env:UE-LocalDataCachePath} = $DDCPath
 
-$logDir = Join-Path $unrealDir '.logs'
-$metricDir = Join-Path $unrealDir '.metrics'
-New-Item -ItemType Directory -Force -Path $logDir, $metricDir | Out-Null
-$stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
 $mode = if ($ListOnly) { 'listonly' } else { 'run' }
-$logFile = Join-Path $logDir "buildgraph-Lyra-$mode-$stamp.log"
-
-Write-Host "Log    : $logFile"
-Write-Host "Starting BuildGraph ($mode)..."
-$sw = [System.Diagnostics.Stopwatch]::StartNew()
-& $uat @uatArgs 2>&1 | Tee-Object -FilePath $logFile
-$exit = $LASTEXITCODE
-$sw.Stop()
-$dur = [math]::Round($sw.Elapsed.TotalSeconds, 1)
-
-$metric = [pscustomobject]@{
-  track       = 'unreal'
-  step        = 'buildgraph'
-  target      = $Target
-  listOnly    = [bool]$ListOnly
-  success     = ($exit -eq 0)
-  exitCode    = $exit
-  durationSec = $dur
-  script      = $Script
-  engine      = $EnginePath
-  uproject    = $Uproject
-  utc         = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-}
-$metricFile = Join-Path $metricDir "buildgraph-Lyra-$mode-$stamp.json"
-$metric | ConvertTo-Json | Set-Content -Path $metricFile -Encoding UTF8
+$step = Invoke-TimedBuildStep -Step 'buildgraph' -UnrealDir $unrealDir `
+  -BaseName "buildgraph-Lyra-$mode" -Engine $EnginePath -Uproject $Uproject `
+  -StartMessage "Starting BuildGraph ($mode)..." `
+  -Metric ([ordered]@{ target = $Target; listOnly = [bool]$ListOnly; script = $Script }) `
+  -Action { param($LogFile) & $uat @uatArgs 2>&1 | Tee-Object -FilePath $LogFile }
+$exit = $step.Exit; $dur = $step.DurationSec
 
 Write-Host ''
 if ($exit -eq 0) {
   Write-Host "BUILDGRAPH $($mode.ToUpper()) OK - '$Target' in ${dur}s" -ForegroundColor Green
 } else {
-  Write-Host "BUILDGRAPH FAILED (exit $exit) after ${dur}s - see $logFile" -ForegroundColor Red
+  Write-Host "BUILDGRAPH FAILED (exit $exit) after ${dur}s - see $($step.LogFile)" -ForegroundColor Red
 }
-Write-Host "metric: $metricFile"
+Write-Host "metric: $($step.MetricFile)"
 exit $exit

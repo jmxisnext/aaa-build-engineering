@@ -82,44 +82,21 @@ if ($Clean) {
   }
 }
 
-$logDir = Join-Path $unrealDir '.logs'
-$metricDir = Join-Path $unrealDir '.metrics'
-New-Item -ItemType Directory -Force -Path $logDir, $metricDir | Out-Null
-$stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-$logFile = Join-Path $logDir "compile-$Target-$Configuration-$stamp.log"
-
-Write-Host "Log    : $logFile"
-Write-Host 'Starting build...'
-$sw = [System.Diagnostics.Stopwatch]::StartNew()
-& $build @buildArgs 2>&1 | Tee-Object -FilePath $logFile
-$exit = $LASTEXITCODE   # Tee-Object (a cmdlet) does not reset native exit code
-$sw.Stop()
-$dur = [math]::Round($sw.Elapsed.TotalSeconds, 1)
-
-$metric = [pscustomobject]@{
-  track         = 'unreal'
-  step          = 'compile'
-  target        = $Target
-  platform      = $Platform
-  configuration = $Configuration
-  clean         = [bool]$Clean
-  noUBA         = [bool]$NoUBA
-  maxParallel   = $MaxParallelActions
-  success       = ($exit -eq 0)
-  exitCode      = $exit
-  durationSec   = $dur
-  engine        = $EnginePath
-  uproject      = $Uproject
-  utc           = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-}
-$metricFile = Join-Path $metricDir "compile-$Target-$Configuration-$stamp.json"
-$metric | ConvertTo-Json | Set-Content -Path $metricFile -Encoding UTF8
+$step = Invoke-TimedBuildStep -Step 'compile' -UnrealDir $unrealDir `
+  -BaseName "compile-$Target-$Configuration" -Engine $EnginePath -Uproject $Uproject `
+  -StartMessage 'Starting build...' `
+  -Metric ([ordered]@{
+    target = $Target; platform = $Platform; configuration = $Configuration
+    clean  = [bool]$Clean; noUBA = [bool]$NoUBA; maxParallel = $MaxParallelActions
+  }) `
+  -Action { param($LogFile) & $build @buildArgs 2>&1 | Tee-Object -FilePath $LogFile }
+$exit = $step.Exit; $dur = $step.DurationSec
 
 Write-Host ''
 if ($exit -eq 0) {
   Write-Host "BUILD SUCCEEDED - $Target $Configuration in ${dur}s" -ForegroundColor Green
 } else {
-  Write-Host "BUILD FAILED (exit $exit) after ${dur}s - see $logFile" -ForegroundColor Red
+  Write-Host "BUILD FAILED (exit $exit) after ${dur}s - see $($step.LogFile)" -ForegroundColor Red
 }
-Write-Host "metric: $metricFile"
+Write-Host "metric: $($step.MetricFile)"
 exit $exit

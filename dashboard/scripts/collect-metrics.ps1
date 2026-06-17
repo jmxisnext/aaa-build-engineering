@@ -17,6 +17,7 @@ param(
     [string]$Out        = (Join-Path $PSScriptRoot "..\data\snapshot.json")
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot '_dashboard-common.ps1')
 
 function ConvertFrom-TcBuilds {
     param([object[]]$Builds)
@@ -60,13 +61,13 @@ function Get-AccelFeed {
     foreach ($f in Get-ChildItem $Dir -Filter *.json -ErrorAction SilentlyContinue) {
         $m = Get-Content $f.FullName -Raw | ConvertFrom-Json
         switch ($m.sample) {
-            'compile'   { $r=@{}; $m.results | ForEach-Object { $r[$_.config]=$_.best }
+            'compile'   { $r = ConvertTo-ConfigBest $m.results
                           $acc.compile = @{ serial=$r['serial (per-TU)']; mp=$r['/MP (per-TU)']; unity=$r['unity (1 file)']; pchWarm=$r['PCH warm + /MP'] } }
-            'fastbuild' { $r=@{}; $m.results | ForEach-Object { $r[$_.config]=$_.best }
+            'fastbuild' { $r = ConvertTo-ConfigBest $m.results
                           $acc.fastbuild = @{ miss=$r['clean (cache miss)']; hit=$r['clean (cache HIT)'] } }
-            'link'      { $r=@{}; $m.results | ForEach-Object { $r[$_.config]=$_.best }
+            'link'      { $r = ConvertTo-ConfigBest $m.results
                           $acc.link = @{ full=$r['full /INCREMENTAL:NO']; incremental=$r['incremental (+1 edit)']; ltcg=$r['/LTCG (/GL objs)'] } }
-            'bgfx'      { $r=@{}; $m.results | ForEach-Object { $r[$_.config]=$_.best }
+            'bgfx'      { $r = ConvertTo-ConfigBest $m.results
                           $acc.bgfx = @{ serial=$r['serial (per-file)']; mp=$r['/MP (per-file)']; unity=$r['unity (amalgamated)']
                               trivialEditPerFile=$m.incremental.trivial; trivialEditUnity=$m.incremental.unity } }
         }

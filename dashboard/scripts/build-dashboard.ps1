@@ -12,6 +12,7 @@ param(
     [string]$Out      = (Join-Path $PSScriptRoot "..\dashboard.html")
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot '_dashboard-common.ps1')
 
 function ConvertTo-HtmlText { param([string]$s) [System.Security.SecurityElement]::Escape([string]$s) }
 

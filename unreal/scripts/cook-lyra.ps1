@@ -87,43 +87,21 @@ if ($Clean) {
   if (Test-Path $cooked) { Write-Host "Clean  : removing $cooked"; Remove-Item $cooked -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-$logDir = Join-Path $unrealDir '.logs'
-$metricDir = Join-Path $unrealDir '.metrics'
-New-Item -ItemType Directory -Force -Path $logDir, $metricDir | Out-Null
-$stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-$logFile = Join-Path $logDir "cook-Lyra-$Platform-$ClientConfig-$stamp.log"
-
-Write-Host "Log    : $logFile"
-Write-Host 'Starting cook...'
-$sw = [System.Diagnostics.Stopwatch]::StartNew()
-& $uat @uatArgs 2>&1 | Tee-Object -FilePath $logFile
-$exit = $LASTEXITCODE   # Tee-Object (a cmdlet) does not reset native exit code
-$sw.Stop()
-$dur = [math]::Round($sw.Elapsed.TotalSeconds, 1)
-
-$metric = [pscustomobject]@{
-  track         = 'unreal'
-  step          = 'cook'
-  target        = 'Lyra'
-  platform      = $Platform
-  configuration = $ClientConfig
-  clean         = [bool]$Clean
-  ddcPath       = $DDCPath
-  success       = ($exit -eq 0)
-  exitCode      = $exit
-  durationSec   = $dur
-  engine        = $EnginePath
-  uproject      = $Uproject
-  utc           = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-}
-$metricFile = Join-Path $metricDir "cook-Lyra-$Platform-$ClientConfig-$stamp.json"
-$metric | ConvertTo-Json | Set-Content -Path $metricFile -Encoding UTF8
+$step = Invoke-TimedBuildStep -Step 'cook' -UnrealDir $unrealDir `
+  -BaseName "cook-Lyra-$Platform-$ClientConfig" -Engine $EnginePath -Uproject $Uproject `
+  -StartMessage 'Starting cook...' `
+  -Metric ([ordered]@{
+    target = 'Lyra'; platform = $Platform; configuration = $ClientConfig
+    clean  = [bool]$Clean; ddcPath = $DDCPath
+  }) `
+  -Action { param($LogFile) & $uat @uatArgs 2>&1 | Tee-Object -FilePath $LogFile }
+$exit = $step.Exit; $dur = $step.DurationSec
 
 Write-Host ''
 if ($exit -eq 0) {
   Write-Host "COOK SUCCEEDED - Lyra $Platform $ClientConfig in ${dur}s" -ForegroundColor Green
 } else {
-  Write-Host "COOK FAILED (exit $exit) after ${dur}s - see $logFile" -ForegroundColor Red
+  Write-Host "COOK FAILED (exit $exit) after ${dur}s - see $($step.LogFile)" -ForegroundColor Red
 }
-Write-Host "metric: $metricFile"
+Write-Host "metric: $($step.MetricFile)"
 exit $exit
