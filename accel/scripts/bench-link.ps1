@@ -116,17 +116,12 @@ function Invoke-Link([string[]]$a) {
 }
 function Exe-KB([string]$exe) { [math]::Round((Get-Item $exe).Length / 1KB) }
 
-# Times only the link. $Pre (untimed) runs before each rep and receives the rep #.
+# Times only the link (best-of-$Reps via the shared Measure-BestOf). $Pre
+# (untimed) runs before each rep and receives the rep #; the exe-KB column is
+# computed once after the loop. 3-decimal rounding (links are sub-second).
 function Measure-Link([string]$Label, [scriptblock]$Pre, [string[]]$LinkArgs, [string]$OutExe) {
-    $best = [double]::MaxValue
-    for ($r = 1; $r -le $Reps; $r++) {
-        & $Pre $r
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        Invoke-Link $LinkArgs
-        $sw.Stop()
-        if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
-    }
-    [pscustomobject]@{ Config = $Label; Best = [math]::Round($best, 3); KB = (Exe-KB $OutExe) }
+    Measure-BestOf $Label -Reps $Reps -Round 3 -Pre $Pre `
+        -Action { Invoke-Link $LinkArgs } -Extra { @{ KB = (Exe-KB $OutExe) } }
 }
 
 # ===========================================================================
@@ -220,19 +215,9 @@ foreach ($mult in 1, 2, 4) {
     Get-ChildItem $obj -Filter *.obj | Remove-Item -Force
     Compile-All $obj @('/O2', '/Gy', '/Z7')
     $sweepObjs = Get-ChildItem $obj -Filter *.obj | ForEach-Object { $_.FullName }
-    $best = [double]::MaxValue
-    for ($r = 1; $r -le 2; $r++) {
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        Invoke-Link (@('/INCREMENTAL:NO','/DEBUG:FULL','/OPT:NOREF,NOICF',"/OUT:$exe") + $sweepObjs)
-        $sw.Stop()
-        if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
-    }
-    Write-Host ("{0,12} {1,9:N3} {2,9}" -f ($TU * $sw_syms), [math]::Round($best,3), (Exe-KB $exe))
+    $best = (Measure-BestOf "sweep" -Reps 2 -Round 3 `
+        -Action { Invoke-Link (@('/INCREMENTAL:NO','/DEBUG:FULL','/OPT:NOREF,NOICF',"/OUT:$exe") + $sweepObjs) }).Best
+    Write-Host ("{0,12} {1,9:N3} {2,9}" -f ($TU * $sw_syms), $best, (Exe-KB $exe))
 }
 
-if ($Json) {
-    $payload = [ordered]@{ sample='link'; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } }) }
-    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
-    Write-Host "wrote metrics: $Json"
-}
+Write-MetricsJson -Sample 'link' -Results $results -Path $Json

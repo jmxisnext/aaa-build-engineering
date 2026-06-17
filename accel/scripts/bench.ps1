@@ -77,45 +77,27 @@ function RunCl([string[]]$a) {
     if ($LASTEXITCODE -ne 0) { throw "cl failed: $($a -join ' ')" }
 }
 
-function Measure-Config([string]$Label, [scriptblock]$Build) {
-    $best = [double]::MaxValue
-    for ($r = 1; $r -le $Reps; $r++) {
-        Get-ChildItem $obj -Filter *.obj -ErrorAction SilentlyContinue | Remove-Item -Force
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        & $Build
-        $sw.Stop()
-        if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
-    }
-    [pscustomobject]@{ Config = $Label; Best = [math]::Round($best, 2) }
-}
+# Wipe the obj dir before each timed rep so every config is a cold compile (the
+# .pch survives — only *.obj is removed — which is what the PCH-warm case needs).
+$wipeObj = { Get-ChildItem $obj -Filter *.obj -ErrorAction SilentlyContinue | Remove-Item -Force }
 
 Write-Host ("`nTUs={0}  cores={1}  chunks={2}  reps={3} (best cold wall-time)`n" -f $TU, $cores, $Chunks, $Reps)
 
 $results = @()
-$results += Measure-Config "serial (per-TU)"   { RunCl $srcs }
-$results += Measure-Config "/MP (per-TU)"      { RunCl (@('/MP') + $srcs) }
-$results += Measure-Config "unity (1 file)"    { RunCl $unityAll }
-$results += Measure-Config ("unity x{0} + /MP" -f $Chunks) { RunCl (@('/MP') + $chunkFiles) }
+$results += Measure-BestOf "serial (per-TU)" -Reps $Reps -Pre $wipeObj -Action { RunCl $srcs }
+$results += Measure-BestOf "/MP (per-TU)"    -Reps $Reps -Pre $wipeObj -Action { RunCl (@('/MP') + $srcs) }
+$results += Measure-BestOf "unity (1 file)"  -Reps $Reps -Pre $wipeObj -Action { RunCl $unityAll }
+$results += Measure-BestOf ("unity x{0} + /MP" -f $Chunks) -Reps $Reps -Pre $wipeObj -Action { RunCl (@('/MP') + $chunkFiles) }
 # PCH clean: the .pch is (re)built inside the timed region -> honest clean build.
-$results += Measure-Config "PCH clean + /MP" {
+$results += Measure-BestOf "PCH clean + /MP" -Reps $Reps -Pre $wipeObj -Action {
     RunCl @('/Ycpch.h', "/Fp$pch", $pchCpp)
     RunCl (@('/MP', '/Yupch.h', "/Fp$pch") + $srcs)
 }
 # PCH warm: prebuild the .pch ONCE (untimed); reps wipe *.obj but the .pch
 # survives -> models the steady-state incremental build.
 RunCl @('/Ycpch.h', "/Fp$pch", $pchCpp)
-$results += Measure-Config "PCH warm + /MP"   { RunCl (@('/MP', '/Yupch.h', "/Fp$pch") + $srcs) }
+$results += Measure-BestOf "PCH warm + /MP" -Reps $Reps -Pre $wipeObj -Action { RunCl (@('/MP', '/Yupch.h', "/Fp$pch") + $srcs) }
 
-$base = ($results | Where-Object { $_.Config -eq "serial (per-TU)" }).Best
-Write-Host ("{0,-22} {1,9} {2,11}" -f "config", "best(s)", "vs serial")
-Write-Host ("-" * 44)
-foreach ($r in $results) {
-    Write-Host ("{0,-22} {1,9:N2} {2,10:N2}x" -f $r.Config, $r.Best, ($base / $r.Best))
-}
+Write-SpeedupTable $results -BaselineConfig "serial (per-TU)" -VsLabel "vs serial"
 
-if ($Json) {
-    $payload = [ordered]@{ sample='compile'; tu=$TU; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } }) }
-    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
-    Write-Host "wrote metrics: $Json"
-}
+Write-MetricsJson -Sample 'compile' -Results $results -Path $Json -Lead ([ordered]@{ tu = $TU })

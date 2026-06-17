@@ -116,51 +116,23 @@ Write-Host ("per-file serial sum: {0:N2} s    heaviest: {1}    trivial: {2}" -f 
 if ($Probe) { return }
 
 # --- A. Clean compile: serial vs /MP vs unity (best-of-Reps cold) -------------
-function Measure-Config([string]$Label, [scriptblock]$Build) {
-    $best = [double]::MaxValue
-    for ($r = 1; $r -le $Reps; $r++) {
-        ClearObj
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        & $Build
-        $sw.Stop()
-        if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
-    }
-    [pscustomobject]@{ Config = $Label; Best = [math]::Round($best, 2) }
-}
-
 $files = $perFile.FullName
 $results = @()
-$results += Measure-Config "serial (per-file)"   { RunCl -files $files }
-$results += Measure-Config "/MP (per-file)"      { RunCl -files $files -MP $true }
-$results += Measure-Config "unity (amalgamated)" { RunCl -files @($amalg) }
+$results += Measure-BestOf "serial (per-file)"   -Reps $Reps -Pre { ClearObj } -Action { RunCl -files $files }
+$results += Measure-BestOf "/MP (per-file)"      -Reps $Reps -Pre { ClearObj } -Action { RunCl -files $files -MP $true }
+$results += Measure-BestOf "unity (amalgamated)" -Reps $Reps -Pre { ClearObj } -Action { RunCl -files @($amalg) }
 
-$base = ($results | Where-Object { $_.Config -eq "serial (per-file)" }).Best
 Write-Host ("`nA. Clean compile  ({0} TUs, best of {1} cold reps, /c)`n" -f $perFile.Count, $Reps)
-Write-Host ("{0,-22} {1,9} {2,11}" -f "config", "best(s)", "vs serial")
-Write-Host ("-" * 44)
-foreach ($r in $results) {
-    Write-Host ("{0,-22} {1,9:N2} {2,10:N2}x" -f $r.Config, $r.Best, ($base / $r.Best))
-}
+Write-SpeedupTable $results -BaselineConfig "serial (per-file)" -VsLabel "vs serial"
 
 # --- B. Single-file-edit incremental: the real edit-build loop ----------------
 # cl has no internal incremental compile -- "incremental" is which TUs a build
 # system rebuilds. Editing a leaf .cpp rebuilds: per-file -> just that TU;
 # amalgamation -> the whole engine. Measured for a heavy file and a trivial one.
-function Time-Compile([string[]]$files) {
-    $best = [double]::MaxValue
-    for ($r = 1; $r -le $Reps; $r++) {
-        ClearObj
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        RunCl -files $files
-        $sw.Stop()
-        if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
-    }
-    [math]::Round($best, 2)
-}
 $heavyFile = (Join-Path $src $heaviest)
 $trivFile  = (Join-Path $src $trivial)
-$tHeavy = Time-Compile @($heavyFile)
-$tTriv  = Time-Compile @($trivFile)
+$tHeavy = (Measure-BestOf "edit-heavy"   -Reps $Reps -Pre { ClearObj } -Action { RunCl -files @($heavyFile) }).Best
+$tTriv  = (Measure-BestOf "edit-trivial" -Reps $Reps -Pre { ClearObj } -Action { RunCl -files @($trivFile) }).Best
 $tUnity = ($results | Where-Object { $_.Config -eq "unity (amalgamated)" }).Best
 Write-Host "`nB. Single-file-edit incremental rebuild  (recompile what changed)`n"
 Write-Host ("{0,-34} {1,9}" -f "edit -> rebuild", "best(s)")
@@ -195,11 +167,7 @@ Write-Host "     declaration-heavy PCH) are the ones that fit this workload -- n
 Write-Host "     codegen tuning. Profile before picking the lever (the Track 3 thesis)."
 Write-Host ""
 
-if ($Json) {
-    $payload = [ordered]@{ sample='bgfx'; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } })
-        incremental=@{ heavy=$tHeavy; trivial=$tTriv; unity=$tUnity }
-        profile=@{ frontendSec=$fe; backendSec=$be; cgFunctions=$cgFuncs } }
-    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
-    Write-Host "wrote metrics: $Json"
-}
+Write-MetricsJson -Sample 'bgfx' -Results $results -Path $Json -Tail ([ordered]@{
+    incremental = @{ heavy = $tHeavy; trivial = $tTriv; unity = $tUnity }
+    profile     = @{ frontendSec = $fe; backendSec = $be; cgFunctions = $cgFuncs }
+})

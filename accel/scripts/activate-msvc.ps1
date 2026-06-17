@@ -2,7 +2,9 @@
 .SYNOPSIS
   Locate the newest installed MSVC C++ toolchain and import its environment
   into the *current* PowerShell session, so `cl`, `link`, `nmake`, and
-  `msbuild` are on PATH.
+  `msbuild` are on PATH. Also hosts the shared benchmark helpers
+  (Measure-BestOf / Write-SpeedupTable / Write-MetricsJson) that the
+  bench*.ps1 / demo-fbuild.ps1 scripts dot-source.
 
 .DESCRIPTION
   This machine has a working MSVC toolchain (VS 2017 Community and/or the
@@ -36,6 +38,84 @@ $ErrorActionPreference = "Stop"
 # ourselves. PS 7.4+ would otherwise abort on `cl` (which exits 2 when
 # given no input files). Harmless no-op variable on Windows PowerShell 5.1.
 $PSNativeCommandUseErrorActionPreference = $false
+
+# ===========================================================================
+# Shared benchmark helpers — dot-sourced by bench.ps1, bench-link.ps1,
+# bench-bgfx.ps1, demo-fbuild.ps1. Defined BEFORE the activation early-return
+# below so they exist even when MSVC is already active. Each bench previously
+# carried its own near-copy of these.
+# ===========================================================================
+
+# Best-of-$Reps wall-clock of a timed $Action. $Pre (untimed) runs before each
+# rep and receives the rep number — used for per-rep cleanup (wipe *.obj) or the
+# edit-then-recompile the link/incremental configs need. $Round sets decimals
+# (2 for compile, 3 for link). $Extra, evaluated once after the loop, returns a
+# hashtable of extra columns (e.g. @{ KB = ... }) merged into the result.
+# Returns [pscustomobject]{ Config; Best; <extra...> }.
+function Measure-BestOf {
+    param(
+        [string]$Label,
+        [scriptblock]$Action,
+        [int]$Reps = 3,
+        [scriptblock]$Pre,
+        [int]$Round = 2,
+        [scriptblock]$Extra
+    )
+    $best = [double]::MaxValue
+    for ($r = 1; $r -le $Reps; $r++) {
+        if ($Pre) { & $Pre $r }
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        & $Action
+        $sw.Stop()
+        if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
+    }
+    $o = [ordered]@{ Config = $Label; Best = [math]::Round($best, $Round) }
+    if ($Extra) { $h = & $Extra; foreach ($k in $h.Keys) { $o[$k] = $h[$k] } }
+    [pscustomobject]$o
+}
+
+# The "best(s) | vs <baseline>" ratio table shared by the compile/cache benches.
+# $BaselineConfig names the row that anchors 1.00x. (bench-link keeps its own
+# richer table — it adds an exe-KB column and faster/slower wording.)
+function Write-SpeedupTable {
+    param(
+        [object[]]$Results,
+        [string]$BaselineConfig,
+        [string]$VsLabel = "vs base",
+        [string]$Unit    = "best(s)"
+    )
+    $base = ($Results | Where-Object { $_.Config -eq $BaselineConfig }).Best
+    Write-Host ("{0,-22} {1,9} {2,11}" -f "config", $Unit, $VsLabel)
+    Write-Host ("-" * 44)
+    foreach ($r in $Results) {
+        Write-Host ("{0,-22} {1,9:N2} {2,10:N2}x" -f $r.Config, $r.Best, ($base / $r.Best))
+    }
+}
+
+# Emit the metric JSON the dashboard's collect-metrics.ps1 ingests. One schema
+# for every bench: sample, [lead fields], cores, generatedUtc, results[{config,
+# best}], [tail fields]. $Lead carries fields before cores (e.g. tu); $Tail
+# carries fields after results (e.g. bgfx's incremental/profile blocks). No-op
+# when -Path is empty (benches only write JSON when -Json is passed).
+function Write-MetricsJson {
+    param(
+        [string]$Sample,
+        [object[]]$Results,
+        [string]$Path,
+        [System.Collections.IDictionary]$Lead,
+        [System.Collections.IDictionary]$Tail,
+        [int]$Cores = [int]$env:NUMBER_OF_PROCESSORS
+    )
+    if (-not $Path) { return }
+    $payload = [ordered]@{ sample = $Sample }
+    if ($Lead) { foreach ($k in $Lead.Keys) { $payload[$k] = $Lead[$k] } }
+    $payload['cores']        = $Cores
+    $payload['generatedUtc'] = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $payload['results']      = @($Results | ForEach-Object { [ordered]@{ config = $_.Config; best = $_.Best } })
+    if ($Tail) { foreach ($k in $Tail.Keys) { $payload[$k] = $Tail[$k] } }
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Path -Encoding ascii
+    Write-Host "wrote metrics: $Path"
+}
 
 # Idempotent: already active?
 $existing = Get-Command cl.exe -ErrorAction SilentlyContinue

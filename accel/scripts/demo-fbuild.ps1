@@ -71,45 +71,23 @@ function Invoke-FB([string[]]$CliArgs) {
     Push-Location $fbDir
     try { $script:fbOut = (& $fb @CliArgs 2>&1 | Out-String) }
     finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { Write-Host $script:fbOut; throw "FBuild exit $LASTEXITCODE (args: $($CliArgs -join ' '))" }
 }
 function Clear-Obj   { Get-ChildItem $obj   -Recurse -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force }
 function Clear-Db    { Get-ChildItem $fbDir -Filter *.fdb -ErrorAction SilentlyContinue | Remove-Item -Force }
 function Clear-Cache { Get-ChildItem $cache -Recurse -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force }
 
-function Measure-FB([string]$Label, [scriptblock]$Pre, [string[]]$CliArgs) {
-    $best = [double]::MaxValue
-    for ($r = 1; $r -le $Reps; $r++) {
-        & $Pre
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        Invoke-FB $CliArgs
-        $sw.Stop()
-        if ($LASTEXITCODE -ne 0) { Write-Host $script:fbOut; throw "${Label}: FBuild exit $LASTEXITCODE" }
-        if ($sw.Elapsed.TotalSeconds -lt $best) { $best = $sw.Elapsed.TotalSeconds }
-    }
-    [pscustomobject]@{ Config = $Label; Best = [math]::Round($best, 2) }
-}
-
 Write-Host ("`nFASTBuild v1.20   TUs={0}   cores={1}   reps={2} (best wall-time)`n" -f $TU, $cores, $Reps)
 
 $results = @()
-$results += Measure-FB "clean (cache miss)" { Clear-Obj; Clear-Db; Clear-Cache } @('-cache', 'bench')
+$results += Measure-BestOf "clean (cache miss)"  -Reps $Reps -Pre { Clear-Obj; Clear-Db; Clear-Cache } -Action { Invoke-FB @('-cache', 'bench') }
 # Populate the cache once (untimed) so the next config sees hits.
 Clear-Obj; Clear-Db; Invoke-FB @('-cache', 'bench')
-$results += Measure-FB "clean (cache HIT)"  { Clear-Obj; Clear-Db } @('-cache', 'bench')
-$results += Measure-FB "no-op (incremental)" { } @('bench')
+$results += Measure-BestOf "clean (cache HIT)"   -Reps $Reps -Pre { Clear-Obj; Clear-Db } -Action { Invoke-FB @('-cache', 'bench') }
+$results += Measure-BestOf "no-op (incremental)" -Reps $Reps -Action { Invoke-FB @('bench') }
 
-$miss = ($results | Where-Object { $_.Config -eq "clean (cache miss)" }).Best
-Write-Host ("{0,-22} {1,9} {2,12}" -f "config", "best(s)", "vs miss")
-Write-Host ("-" * 45)
-foreach ($r in $results) {
-    Write-Host ("{0,-22} {1,9:N2} {2,11:N2}x" -f $r.Config, $r.Best, ($miss / $r.Best))
-}
+Write-SpeedupTable $results -BaselineConfig "clean (cache miss)" -VsLabel "vs miss"
 Write-Host "`n--- FASTBuild summary of the last (no-op) run ---"
 Write-Host $script:fbOut.Trim()
 
-if ($Json) {
-    $payload = [ordered]@{ sample='fastbuild'; tu=$TU; cores=$cores; generatedUtc=(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-        results=@($results | ForEach-Object { @{ config=$_.Config; best=$_.Best } }) }
-    $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $Json -Encoding ascii
-    Write-Host "wrote metrics: $Json"
-}
+Write-MetricsJson -Sample 'fastbuild' -Results $results -Path $Json -Lead ([ordered]@{ tu = $TU })
