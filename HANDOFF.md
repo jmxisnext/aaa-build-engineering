@@ -1,35 +1,42 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: e270bf0 - docs: reconcile track drift + de-identify active demo surface (Session 1)
+Branch: main   |   Last commit: eee20d0 - refactor(s2): DRY extraction — unreal spine + dashboard config-best helper
 
 ## What was just built
-- e270bf0 - **Session 1** of the audit-remediation plan: reconciled doc-drift across the 5 planning/track
-  docs and de-identified the active demo surface. CI-1/CI-2: `ci/README.md` now has a "Lyra pipeline
-  (Windows agent)" section + `bootstrap-lyra.ps1` table row (heading matches the script's citation, so
-  the dangling pointer is resolved). DS-4: Track 3 (bgfx) marked **DONE** (`a2504ff`). DS-5: `pipeline/`
-  tagged "Track 5 - planned" in README + CLAUDE. DS-6: Step-2 label reconciled. DS-7: SKILLS_ROADMAP
-  "superseded" banner. UE-2: MSVC 14.44-vs-14.38 toolset note. UE-7/DS-2: `james -> devuser` across all
-  active scripts/configs/docs - **`devuser` is now the sandbox p4 identity** (perforce/README documents
-  the `p4 renameuser --from=james --to=devuser` migration).
+- eee20d0 - **Session 2, UE-1 + DB-5:** `Invoke-TimedBuildStep` extracted into `_unreal-common.ps1`
+  (stopwatch/tee/metric-emit spine shared by compile/cook/package/buildgraph wrappers; each now
+  passes an `-Action` scriptblock + domain `-Metric` fields; `[int]$LASTEXITCODE` coercion ensures
+  cmdlet-only pipelines yield 0). New `dashboard/scripts/_dashboard-common.ps1` with
+  `ConvertTo-ConfigBest` (replaces the 4× repeated config→best two-liner in `Get-AccelFeed`);
+  `build-dashboard.ps1` dot-sources it (forward for S3's `Format-When`). 58 dashboard tests pass;
+  all 9 changed scripts parse-clean.
+- aee6d78 - **Session 2, AC-1:** `Measure-BestOf` / `Write-SpeedupTable` / `Write-MetricsJson`
+  extracted into `accel/scripts/activate-msvc.ps1`; 4 accel bench scripts converted to the shared
+  helpers (no behavior change; identical JSON diff confirmed semantically).
+- fd36aad - **Session 2, CI-3:** TeamCity REST plumbing (`Get-SuperUserToken` / `Resolve-TeamCityToken`
+  / `Connect-TeamCity` / `Invoke-TC`) extracted into `ci/scripts/_ci-common.ps1`; 6 CI scripts
+  dot-source it. `{BaseUrl,Auth,Csrf,Session,DryRun}` connection object; `-DryRun` is inert;
+  `setup-vcs-trigger.ps1` hook-mint opens its own session. GET-only scripts use only
+  `Resolve-TeamCityToken`. Dry-run plan comparison (semantic JSON, sorted keys) confirmed no
+  behavior change.
 
 ## Live edge
-This session ran a full sanity/scope/optimization audit (~40 findings) and sequenced it into a
-**6-session remediation plan** at `C:\Users\james\.claude\plans\lets-take-these-results-compiled-map.md`
-(that file is the durable tracker for S2-S6, incl. the coverage table + hard dependency edges).
-Session 1 (docs + de-id) is committed. The one expensive live Horde run is isolated in **S4** (decided:
-full stamp/metric chain + warm DDC). Note: for the demos to run on this box, `devuser` must exist as a
-super on the sandbox p4d (`p4 renameuser` as documented). **5 commits unpushed** (this closeout + S1 +
-3 prior) - human runs `! git push origin main`.
+**Session 2 complete.** All S2 audit findings landed (CI-3, AC-1, UE-1, DB-5). Three local commits
+await push — human runs `! git push origin main`. Remaining remediation sessions: S3 (DB-1/DB-4/DB-6
+dashboard honesty), S4 (UE-3/UE-6/DB-2/DB-3 live Horde stamp run), S5–S6 (minor polish). The
+`_dashboard-common.ps1` forward dot-source in `build-dashboard.ps1` is the S3 seam for `Format-When`.
 
 ## Next
-Start **Session 2 - DRY extraction** (the L-sized one; test-free on 3 of 4 tracks, so it leads with a
-step-0 no-op baseline capture for the before/after metric-JSON diff). Extract the four shared helpers:
-(1) create `ci/scripts/_ci-common.ps1` - reconcile the 2 `Get-SuperUserToken` variants + host
-`Invoke-TC`/auth/CSRF, dot-sourced by the 5 ci scripts (CI-3); (2) extend `accel/scripts/activate-msvc.ps1`
-with `Measure-BestOf`/`Write-SpeedupTable`/`Write-MetricsJson` (AC-1); (3) promote `Invoke-TimedBuildStep`
-into `unreal/scripts/_unreal-common.ps1` collapsing the 4 wrapper spines, keep stamp-lyra-package out
-(UE-1, seed d819f04); (4) create `dashboard/scripts/_dashboard-common.ps1` with the config->best loop
-(DB-5, do NOT add Format-When - that's born already-correct in S3). Verify: dashboard tests green; for the
-test-free tracks, `Get-Command` resolution + no-op metric-JSON diff vs baseline; commit per track. Full
-step list + verification in the plan file.
+Start **Session 3 — Dashboard honesty (M-sized, TDD-first).** Steps:
+1. Write a failing cross-culture test in `dashboard/tests/`: force de-DE locale + non-UTC TZ at
+   thread level, assert byte-equality of the render vs its own en-US/UTC render of the same fixture
+   (no frozen literals like `62.2`). Confirm it's RED for the right reason.
+2. Add `Format-When` to `dashboard/scripts/_dashboard-common.ps1` using
+   `([datetimeoffset]$x).UtcDateTime.ToString('MM-dd HH:mm',[cultureinfo]::InvariantCulture)`;
+   replace the 3 date-format copies at `build-dashboard.ps1:88,123,136` (DB-6).
+3. Fix footer to use the raw ISO `generatedUtc` string, not culture/TZ-dependent formatting (DB-1).
+4. Re-run new test → GREEN; full `build-dashboard.Tests.ps1` + `collect-metrics.Tests.ps1` green.
+5. DB-4: render the `accel.link` row (already collected/committed; just wired in); update fixture.
+6. Commit: `fix(dashboard): invariant-culture/UTC timestamps via Format-When (DB-1) + render accel.link row (DB-4); add cross-culture render test`
+Plan file: `C:\Users\james\.claude\plans\lets-take-these-results-compiled-map.md` (Session 3 section).
