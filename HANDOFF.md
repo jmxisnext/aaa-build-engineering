@@ -1,42 +1,42 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: eee20d0 - refactor(s2): DRY extraction — unreal spine + dashboard config-best helper
+Branch: main   |   Last commit: c9be38d - fix(dashboard): locale-invariant render via Format-When/Format-Num (DB-1/DB-6) + accel.link row (DB-4)
 
 ## What was just built
-- eee20d0 - **Session 2, UE-1 + DB-5:** `Invoke-TimedBuildStep` extracted into `_unreal-common.ps1`
-  (stopwatch/tee/metric-emit spine shared by compile/cook/package/buildgraph wrappers; each now
-  passes an `-Action` scriptblock + domain `-Metric` fields; `[int]$LASTEXITCODE` coercion ensures
-  cmdlet-only pipelines yield 0). New `dashboard/scripts/_dashboard-common.ps1` with
-  `ConvertTo-ConfigBest` (replaces the 4× repeated config→best two-liner in `Get-AccelFeed`);
-  `build-dashboard.ps1` dot-sources it (forward for S3's `Format-When`). 58 dashboard tests pass;
-  all 9 changed scripts parse-clean.
-- aee6d78 - **Session 2, AC-1:** `Measure-BestOf` / `Write-SpeedupTable` / `Write-MetricsJson`
-  extracted into `accel/scripts/activate-msvc.ps1`; 4 accel bench scripts converted to the shared
-  helpers (no behavior change; identical JSON diff confirmed semantically).
-- fd36aad - **Session 2, CI-3:** TeamCity REST plumbing (`Get-SuperUserToken` / `Resolve-TeamCityToken`
-  / `Connect-TeamCity` / `Invoke-TC`) extracted into `ci/scripts/_ci-common.ps1`; 6 CI scripts
-  dot-source it. `{BaseUrl,Auth,Csrf,Session,DryRun}` connection object; `-DryRun` is inert;
-  `setup-vcs-trigger.ps1` hook-mint opens its own session. GET-only scripts use only
-  `Resolve-TeamCityToken`. Dry-run plan comparison (semantic JSON, sorted keys) confirmed no
-  behavior change.
+- c9be38d - **Session 3, DB-1/DB-6/DB-4 (dashboard honesty, TDD).** Made the render
+  byte-identical across locale/TZ by code, closing the `dashboard/README.md:82-87` claim.
+  Added `Format-When` (UTC + InvariantCulture dates) and `Format-Num` (InvariantCulture
+  numbers) to `_dashboard-common.ps1`; wired the 3 date sites + 7 `-f` number sites in
+  `build-dashboard.ps1`. New cross-culture regression test re-parses + re-renders the
+  fixture under de-DE/+05:30 and ar-SA/-05:00, asserting byte-equality vs en-US/UTC
+  (RED 4 asserts -> GREEN). DB-4: rendered the collected-but-unshown linker levers
+  (full/incremental/ltcg) as a note; regenerated `dashboard.html`. Suite 37/37 + 24/24.
 
 ## Live edge
-**Session 2 complete.** All S2 audit findings landed (CI-3, AC-1, UE-1, DB-5). Three local commits
-await push — human runs `! git push origin main`. Remaining remediation sessions: S3 (DB-1/DB-4/DB-6
-dashboard honesty), S4 (UE-3/UE-6/DB-2/DB-3 live Horde stamp run), S5–S6 (minor polish). The
-`_dashboard-common.ps1` forward dot-source in `build-dashboard.ps1` is the S3 seam for `Format-When`.
+**Session 3 complete.** Two corrections to the plan, both verified: the footer needed NO
+fix (PowerShell `[string]` casts are already invariant), and the real de-DE breaker was the
+`-f` decimal separator (numbers), which the plan only anticipated as a date issue - both now
+covered. Remaining: S4 (the one expensive live Horde run + DB-2/DB-3), then S5-S6 polish.
+**6 commits unpushed** (S1-S3 + 3 closeouts) - human runs `! git push origin main`.
 
 ## Next
-Start **Session 3 — Dashboard honesty (M-sized, TDD-first).** Steps:
-1. Write a failing cross-culture test in `dashboard/tests/`: force de-DE locale + non-UTC TZ at
-   thread level, assert byte-equality of the render vs its own en-US/UTC render of the same fixture
-   (no frozen literals like `62.2`). Confirm it's RED for the right reason.
-2. Add `Format-When` to `dashboard/scripts/_dashboard-common.ps1` using
-   `([datetimeoffset]$x).UtcDateTime.ToString('MM-dd HH:mm',[cultureinfo]::InvariantCulture)`;
-   replace the 3 date-format copies at `build-dashboard.ps1:88,123,136` (DB-6).
-3. Fix footer to use the raw ISO `generatedUtc` string, not culture/TZ-dependent formatting (DB-1).
-4. Re-run new test → GREEN; full `build-dashboard.Tests.ps1` + `collect-metrics.Tests.ps1` green.
-5. DB-4: render the `accel.link` row (already collected/committed; just wired in); update fixture.
-6. Commit: `fix(dashboard): invariant-culture/UTC timestamps via Format-When (DB-1) + render accel.link row (DB-4); add cross-culture render test`
-Plan file: `C:\Users\james\.claude\plans\lets-take-these-results-compiled-map.md` (Session 3 section).
+Start **Session 4 - Horde stamp/metric chain + the ONE live run + DB-2/DB-3 (atomic).**
+This is the infra-gated, expensive session - it needs services UP first: p4d on :1666,
+the Horde agent, Horde server on :13340, plus the junction/sentinel (hard gate; the server
+validates the Perforce cluster at lease-assignment, so p4d must be up). Strict step order
+(each HARD-precedes the next, or the single live run is wasted):
+1. **UE-3:** add `-Source`/`-Orchestrator` params to `unreal/scripts/buildgraph-lyra.ps1`,
+   emit them via the shared `Invoke-TimedBuildStep` spine (from S2); widen
+   `stamp-lyra-package.ps1`'s `-Source` ValidateSet `{standalone,teamcity}` ->
+   `{standalone,teamcity,horde}` (enum-widen HARD-precedes the Stamp node, else ValidateSet
+   errors).
+2. Add a **"Stamp Lyra"** node to `unreal/buildgraph/lyra-pipeline.xml`
+   (`Requires="Package Lyra"`) invoking `stamp-lyra-package.ps1 -Source horde`; assert it
+   writes into the `.metrics` dir `collect-metrics.ps1` scans (not stdout only), or DB-3
+   stays empty.
+3. **UE-6:** warm the DDC (HARD-precedes the run, for the ~3-4 min warm-cook goal).
+4. Run the unmodified graph under Horde **exactly once**; re-collect; apply honest DB-2/DB-3
+   dashboard labels (the `source=horde` stamp must not collapse onto the teamcity baseline);
+   commit atomically.
+Full step list + the strict dependency chain: `C:\Users\james\.claude\plans\lets-take-these-results-compiled-map.md` (Session 4 section).
