@@ -27,14 +27,11 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-# ---------- TeamCity read auth (superuser scrape) ----------
-function Get-SuperUserToken {
-    $line = docker exec teamcity-server sh -c "grep 'Super user authentication token:' /opt/teamcity/logs/teamcity-server.log | tail -n 1"
-    if ($line -match "token: (\d+)") { return $matches[1] }
-    throw "No superuser token in teamcity-server.log."
-}
-if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
-if (-not $Token) { $Token = Get-SuperUserToken }
+# ---------- TeamCity read auth (shared token resolve: _ci-common.ps1) ----------
+# GET-only (every write goes through p4, not TeamCity REST): resolve a token and
+# build the Basic-auth header inline.
+. (Join-Path $PSScriptRoot '_ci-common.ps1')
+$Token = Resolve-TeamCityToken -Token $Token
 $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
 $headers = @{ Authorization = $auth; Accept = "application/json" }
 

@@ -40,72 +40,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ---------- auth ----------
+# ---------- auth + REST plumbing (shared: _ci-common.ps1) ----------
 
-function Get-SuperUserToken {
-    $log = docker exec teamcity-server cat /opt/teamcity/logs/teamcity-server.log
-    $line = $log | Select-String "Super user authentication token: " | Select-Object -Last 1
-    if ($line -match "token: (\d+)") {
-        return $matches[1]
-    }
-    throw "Could not find a superuser token in teamcity-server.log. Pass -Token or set `$env:TEAMCITY_TOKEN."
-}
-
-if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
-if (-not $Token) { $Token = Get-SuperUserToken }
-
-$authHeader = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
-
-# TeamCity 2026.x rejects session-authenticated *writes* (POST/PUT/DELETE) that
-# carry no CSRF token — HTTP 403 "failed CSRF check". (Latent before: a re-run
-# against an already-built server only does GETs, which are exempt; it only bites
-# the from-scratch create path.) Fix: open one web session, fetch the CSRF token
-# once from /authenticationTest.html?csrf, and send it as X-TC-CSRF-Token on every
-# mutating request. GETs don't need it but ride the same session. (lesson #10)
-$csrfToken = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
-    -Headers @{ Authorization = $authHeader } -SessionVariable tcSession
+. (Join-Path $PSScriptRoot '_ci-common.ps1')
+$tc = Connect-TeamCity -BaseUrl $BaseUrl -Token $Token
 
 # ---------- REST helpers ----------
-
-function Invoke-TC {
-    param(
-        [string]$Method,
-        [string]$Path,
-        $Body,
-        [string]$ContentType = "application/json",
-        [string]$Accept      = "application/json"
-    )
-    # Put every header on the same hashtable. PowerShell's
-    # -ContentType param sometimes overrides Accept when both are
-    # specified separately, which the TeamCity API rejects as 406.
-    #
-    # Accept must match the endpoint's response content-type — most
-    # endpoints return JSON, but PUT /settings/artifactRules returns
-    # text/plain and rejects Accept: application/json with 406.
-    $reqHeaders = @{
-        Authorization = $authHeader
-        Accept        = $Accept
-    }
-    # CSRF token required on writes (see note above); harmless on GETs.
-    if ($Method -in @("POST", "PUT", "DELETE")) {
-        $reqHeaders["X-TC-CSRF-Token"] = $csrfToken
-    }
-    $reqParams = @{
-        Method     = $Method
-        Uri        = "$BaseUrl$Path"
-        Headers    = $reqHeaders
-        WebSession = $tcSession
-    }
-    if ($null -ne $Body) {
-        $reqParams.Body = if ($Body -is [string]) {
-            $Body
-        } else {
-            $Body | ConvertTo-Json -Depth 10 -Compress
-        }
-        $reqHeaders["Content-Type"] = $ContentType
-    }
-    Invoke-RestMethod @reqParams
-}
 
 function Test-BuildType {
     param([string]$Id)

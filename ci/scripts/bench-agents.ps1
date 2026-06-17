@@ -51,44 +51,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ---------- auth ----------
+# ---------- auth + REST plumbing (shared: _ci-common.ps1) ----------
 
-function Get-SuperUserToken {
-    # LAST occurrence — the persisted log carries stale tokens from prior boots.
-    $line = docker exec teamcity-server sh -c "grep 'Super user authentication token:' /opt/teamcity/logs/teamcity-server.log | tail -n 1"
-    if ($line -match "token: (\d+)") { return $matches[1] }
-    throw "No superuser token in teamcity-server.log. Pass -Token or set `$env:TEAMCITY_TOKEN."
-}
-
-if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
-if (-not $Token) { $Token = Get-SuperUserToken }
-$auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
-
-# TeamCity 2026.x rejects session-authenticated *writes* (PUT enable/authorize, POST
-# buildQueue) that carry no CSRF token — HTTP 403 "failed CSRF check". This script is
-# write-heavy (it toggles agent-02 and queues chains every trial), so unlike a GET-only
-# probe it MUST carry one. Open one web session, fetch the CSRF token once, and send it
-# as X-TC-CSRF-Token on every mutating request; GETs ride the same session. (lesson #10)
-$csrfToken = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
-    -Headers @{ Authorization = $auth } -SessionVariable tcSession
+. (Join-Path $PSScriptRoot '_ci-common.ps1')
+$tc = Connect-TeamCity -BaseUrl $BaseUrl -Token $Token
 
 # ---------- REST helpers ----------
-
-function Invoke-TC {
-    param([string]$Method, [string]$Path, $Body,
-          [string]$ContentType = "application/json",
-          [string]$Accept = "application/json")
-    $headers = @{ Authorization = $auth; Accept = $Accept }
-    # CSRF token required on writes (see auth note above); harmless on GETs.
-    if ($Method -in @("POST","PUT","DELETE")) { $headers["X-TC-CSRF-Token"] = $csrfToken }
-    $p = @{ Method = $Method; Uri = "$BaseUrl$Path"
-            Headers = $headers; WebSession = $tcSession }
-    if ($null -ne $Body) {
-        $p.Body = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 8 }
-        $p.ContentType = $ContentType
-    }
-    Invoke-RestMethod @p
-}
 
 function Set-AgentEnabled {
     param([int]$Id, [bool]$Enabled, [string]$Why)

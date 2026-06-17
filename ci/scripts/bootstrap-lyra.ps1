@@ -54,42 +54,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ---------- auth (CSRF-safe; mirrors bootstrap-builds.ps1, lesson #10) ----------
-
-function Get-SuperUserToken {
-    $log = docker exec teamcity-server cat /opt/teamcity/logs/teamcity-server.log
-    $line = $log | Select-String "Super user authentication token: " | Select-Object -Last 1
-    if ($line -match "token: (\d+)") { return $matches[1] }
-    throw "Could not find a superuser token in teamcity-server.log. Pass -Token or set `$env:TEAMCITY_TOKEN."
-}
-
-if (-not $DryRun) {
-    if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
-    if (-not $Token) { $Token = Get-SuperUserToken }
-    $authHeader = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
-    # One web session; fetch the CSRF token once and send it on every mutating request.
-    $csrfToken = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
-        -Headers @{ Authorization = $authHeader } -SessionVariable tcSession
-}
-
-function Invoke-TC {
-    param([string]$Method, [string]$Path, $Body,
-          [string]$ContentType = "application/json", [string]$Accept = "application/json")
-    if ($DryRun) {
-        $shown = if ($null -ne $Body -and $Body -isnot [string]) { $Body | ConvertTo-Json -Depth 10 -Compress } else { $Body }
-        Write-Host "  [DRY] $Method $Path" -ForegroundColor DarkCyan
-        if ($shown) { Write-Host "        $shown" -ForegroundColor DarkGray }
-        return $null
-    }
-    $reqHeaders = @{ Authorization = $authHeader; Accept = $Accept }
-    if ($Method -in @("POST","PUT","DELETE")) { $reqHeaders["X-TC-CSRF-Token"] = $csrfToken }
-    $reqParams = @{ Method = $Method; Uri = "$BaseUrl$Path"; Headers = $reqHeaders; WebSession = $tcSession }
-    if ($null -ne $Body) {
-        $reqParams.Body = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 10 -Compress }
-        $reqHeaders["Content-Type"] = $ContentType
-    }
-    Invoke-RestMethod @reqParams
-}
+# ---------- auth + REST plumbing (shared: _ci-common.ps1) ----------
+# -DryRun yields an inert connection (no token resolve, no network); Invoke-TC then
+# prints the planned REST calls and sends nothing, so this runs with no server.
+. (Join-Path $PSScriptRoot '_ci-common.ps1')
+$tc = Connect-TeamCity -BaseUrl $BaseUrl -Token $Token -DryRun:$DryRun
 
 # ---------- REST helpers ----------
 

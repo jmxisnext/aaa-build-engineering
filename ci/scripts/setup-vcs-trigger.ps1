@@ -21,35 +21,11 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
-# ---------- auth (superuser scrape — same pattern as bootstrap-builds.ps1) ----------
-function Get-SuperUserToken {
-    $line = docker exec teamcity-server sh -c "grep 'Super user authentication token:' /opt/teamcity/logs/teamcity-server.log | tail -n 1"
-    if ($line -match "token: (\d+)") { return $matches[1] }
-    throw "No superuser token in teamcity-server.log. Pass -Token or set `$env:TEAMCITY_TOKEN."
-}
-if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
-if (-not $Token) { $Token = Get-SuperUserToken }
-$auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
-
-# TeamCity 2026.x requires a CSRF token on session-authenticated writes (403
-# otherwise). Open a superuser session and fetch its CSRF token once; send it as
-# X-TC-CSRF-Token on every write. The ci-hook calls below open their own session
-# with their own CSRF token (a token is per-session). (lesson #10)
-$suCsrf = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
-    -Headers @{ Authorization = $auth } -SessionVariable suSession
-
-function Invoke-TC {
-    param([string]$Method, [string]$Path, $Body,
-          [string]$ContentType = "application/json", [string]$Accept = "application/json")
-    $h = @{ Authorization = $auth; Accept = $Accept }
-    if ($Method -in @("POST", "PUT", "DELETE")) { $h["X-TC-CSRF-Token"] = $suCsrf }
-    $p = @{ Method = $Method; Uri = "$BaseUrl$Path"; Headers = $h; WebSession = $suSession }
-    if ($null -ne $Body) {
-        $p.Body = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 10 }
-        $h["Content-Type"] = $ContentType
-    }
-    Invoke-RestMethod @p
-}
+# ---------- auth + REST plumbing (shared: _ci-common.ps1) ----------
+# Superuser session for the bootstrap calls below. The ci-hook calls in
+# New-HookToken open their OWN session + CSRF token (a CSRF token is per-session).
+. (Join-Path $PSScriptRoot '_ci-common.ps1')
+$tc = Connect-TeamCity -BaseUrl $BaseUrl -Token $Token
 
 # ---------- 0. deploy trigger scripts to the path p4d reads from ----------
 # Follows perforce/triggers/deploy.ps1 so the live trigger references
@@ -80,14 +56,14 @@ function New-HookToken {
     # no password-based login path. The bootstrap password is random and lives only in
     # memory for this function's duration.
     $bootPw   = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Max 256) }))
-    $suAuth   = $auth   # superuser auth from outer scope
+    $suAuth   = $tc.Auth   # superuser auth from the shared connection
     $hookAuth = "Basic " + [Convert]::ToBase64String(
         [Text.Encoding]::ASCII.GetBytes("${HookUser}:${bootPw}"))
 
     # Set bootstrap password via superuser (text/plain body)
     Invoke-RestMethod -Method PUT -Uri "$BaseUrl/app/rest/users/username:$HookUser/password" `
-        -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "Content-Type" = "text/plain"; "X-TC-CSRF-Token" = $suCsrf } `
-        -WebSession $suSession -Body $bootPw | Out-Null
+        -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "Content-Type" = "text/plain"; "X-TC-CSRF-Token" = $tc.Csrf } `
+        -WebSession $tc.Session -Body $bootPw | Out-Null
 
     # Open a ci-hook session + its own CSRF token for the self-service token calls.
     $hookCsrf = Invoke-RestMethod -Uri "$BaseUrl/authenticationTest.html?csrf" `
@@ -115,8 +91,8 @@ function New-HookToken {
     } finally {
         # Clear the bootstrap password — ci-hook authenticates via bearer token only
         Invoke-RestMethod -Method DELETE -Uri "$BaseUrl/app/rest/users/username:$HookUser/password" `
-            -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "X-TC-CSRF-Token" = $suCsrf } `
-            -WebSession $suSession -ErrorAction SilentlyContinue | Out-Null
+            -Headers @{ Authorization = $suAuth; Accept = "text/plain"; "X-TC-CSRF-Token" = $tc.Csrf } `
+            -WebSession $tc.Session -ErrorAction SilentlyContinue | Out-Null
     }
 }
 

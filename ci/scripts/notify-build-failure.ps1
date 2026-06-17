@@ -34,15 +34,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ---------- auth (same fallback chain as bootstrap-builds.ps1) ----------
-function Get-SuperUserToken {
-    $log = docker exec teamcity-server cat /opt/teamcity/logs/teamcity-server.log
-    $line = $log | Select-String "Super user authentication token: " | Select-Object -Last 1
-    if ($line -match "token: (\d+)") { return $matches[1] }
-    throw "No superuser token in teamcity-server.log. Pass -Token or set `$env:TEAMCITY_TOKEN."
-}
-if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
-if (-not $Token) { $Token = Get-SuperUserToken }
+# ---------- auth (shared token resolve: _ci-common.ps1) ----------
+# GET-only watcher: no CSRF/session needed, so just resolve a token and build the
+# Basic-auth header inline (Connect-TeamCity is for the write-path scripts).
+. (Join-Path $PSScriptRoot '_ci-common.ps1')
+$Token = Resolve-TeamCityToken -Token $Token
 
 $headers = @{
     Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Token"))
