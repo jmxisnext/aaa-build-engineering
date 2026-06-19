@@ -2,6 +2,8 @@
 
 Skill ladder for AAA build / databuild engineering roles. Operating principle (from README): **build real artifacts over reading.** Each track ends with one demoable thing you can point at in an interview.
 
+> **Working with other agents (Copilot / Codex / Gemini / multiple Claude sessions)?** The cross-agent rules — track isolation, branch/PR conventions, review & merge, safety — live in [`AGENTS.md`](./AGENTS.md) (model-neutral, canonical) with the step-by-step in [`CONTRIBUTING.md`](./CONTRIBUTING.md). This file is Claude-specific and defers to `AGENTS.md` for anything in its scope.
+
 ## Scope contract
 
 - Every track's success criterion is a **demoable artifact** ("I built this, here's why"). Define that artifact before starting the track; loop until it runs / demos.
