@@ -28,17 +28,38 @@ int main() {
     using HoopsBrawl::ShotMeter;
     using HoopsBrawl::NeedlePosition;
 
+    int cases = 0;
+
+    // ---- default config: release_window_ms=75 ------------------------------
     ShotMeter m;  // defaults: release_window_ms=75, perfect_window_ms=18
 
-    EXPECT_NEAR(NeedlePosition(m, 0.0f),  0.0f,  1e-5);
-    EXPECT_NEAR(NeedlePosition(m, 37.5f), 0.5f,  1e-5);
-    EXPECT_NEAR(NeedlePosition(m, 75.0f), 1.0f,  1e-5);
+    EXPECT_NEAR(NeedlePosition(m, 0.0f),  0.0f,  1e-5);  ++cases;
+    EXPECT_NEAR(NeedlePosition(m, 37.5f), 0.5f,  1e-5);  ++cases;
+    EXPECT_NEAR(NeedlePosition(m, 75.0f), 1.0f,  1e-5);  ++cases;
     // Holding past the window should report >1 — that's how the UI
     // distinguishes "still pressed" from "released on time."
-    EXPECT_NEAR(NeedlePosition(m, 90.0f), 1.2f,  1e-5);
+    EXPECT_NEAR(NeedlePosition(m, 90.0f), 1.2f,  1e-5);  ++cases;
+    // The perfect-release boundary (perfect_window_ms=18) maps onto the needle
+    // at 18/75 = 0.24. NeedlePosition itself doesn't branch on the perfect
+    // window — it's a pure linear ramp — but pinning where that boundary lands
+    // guards against anyone "helpfully" folding the perfect window into the
+    // position math and silently shifting the needle.
+    EXPECT_NEAR(NeedlePosition(m, m.perfect_window_ms), 0.24f, 1e-5);  ++cases;
+
+    // ---- a non-default release window: the ramp must track the field, not a
+    // hard-coded 75. With release_window_ms=100, the midpoint is at t=50ms. ---
+    ShotMeter wide;
+    wide.release_window_ms = 100.0f;
+    EXPECT_NEAR(NeedlePosition(wide, 50.0f),  0.5f, 1e-5);  ++cases;
+    EXPECT_NEAR(NeedlePosition(wide, 100.0f), 1.0f, 1e-5);  ++cases;
+
+    // ---- early/negative input: a clock that reads before the window opens
+    // yields a negative position rather than clamping. Documents the contract
+    // so a future clamp is a deliberate, test-visible change. -------------------
+    EXPECT_NEAR(NeedlePosition(m, -15.0f), -0.2f, 1e-5);  ++cases;
 
     if (g_failures == 0) {
-        std::printf("hoops_tests: OK (4 cases)\n");
+        std::printf("hoops_tests: OK (%d cases)\n", cases);
         return 0;
     }
     std::fprintf(stderr, "hoops_tests: FAIL (%d failure(s))\n", g_failures);
