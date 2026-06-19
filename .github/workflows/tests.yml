@@ -1,0 +1,51 @@
+name: tests
+
+# Gates the repo's existing suites on every push / PR. The suites were already
+# written to exit nonzero on failure (the repo convention); this just runs them
+# automatically so a regression fails a check instead of waiting for someone to
+# remember to run them. One job per toolchain so a missing toolchain can't
+# silently skip a suite the way the local run-tests.sh allows.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  perforce-triggers:
+    name: perforce triggers/tools (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run trigger/tool unit tests
+        run: python -m unittest discover -s perforce/tests -t perforce/tests -v
+
+  hoops-tests:
+    name: hoops_tests (c++ shotmeter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure + build + test
+        working-directory: ci/samples/hoops-brawl-seed/stream
+        run: |
+          cmake -S . -B _build
+          cmake --build _build --target hoops_tests
+          ctest --test-dir _build --output-on-failure
+
+  dashboard:
+    name: dashboard render/collect (powershell)
+    runs-on: ubuntu-latest   # pwsh is preinstalled on GitHub ubuntu runners
+    steps:
+      - uses: actions/checkout@v4
+      - name: build-dashboard render tests
+        shell: pwsh
+        run: ./dashboard/tests/build-dashboard.Tests.ps1
+      - name: collect-metrics transform tests
+        shell: pwsh
+        run: ./dashboard/tests/collect-metrics.Tests.ps1
