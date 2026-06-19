@@ -39,12 +39,14 @@ int main() {
     // Holding past the window should report >1 — that's how the UI
     // distinguishes "still pressed" from "released on time."
     EXPECT_NEAR(NeedlePosition(m, 90.0f), 1.2f,  1e-5);  ++cases;
-    // The perfect-release boundary (perfect_window_ms=18) maps onto the needle
-    // at 18/75 = 0.24. NeedlePosition itself doesn't branch on the perfect
-    // window — it's a pure linear ramp — but pinning where that boundary lands
-    // guards against anyone "helpfully" folding the perfect window into the
-    // position math and silently shifting the needle.
-    EXPECT_NEAR(NeedlePosition(m, m.perfect_window_ms), 0.24f, 1e-5);  ++cases;
+    // The perfect-release boundary should land on the plain linear ramp
+    // (perfect_window_ms / release_window_ms — 0.24 at the shipped defaults).
+    // Deriving the expectation from the fields rather than a literal keeps the
+    // case focused on the real contract — "NeedlePosition does NOT branch on
+    // the perfect window" — and immune to default-tuning changes; a future
+    // edit that folds the perfect window into the position math still trips it.
+    EXPECT_NEAR(NeedlePosition(m, m.perfect_window_ms),
+                m.perfect_window_ms / m.release_window_ms, 1e-5);  ++cases;
 
     // ---- a non-default release window: the ramp must track the field, not a
     // hard-coded 75. With release_window_ms=100, the midpoint is at t=50ms. ---
@@ -54,9 +56,10 @@ int main() {
     EXPECT_NEAR(NeedlePosition(wide, 100.0f), 1.0f, 1e-5);  ++cases;
 
     // ---- early/negative input: a clock that reads before the window opens
-    // yields a negative position rather than clamping. Documents the contract
-    // so a future clamp is a deliberate, test-visible change. -------------------
-    EXPECT_NEAR(NeedlePosition(m, -15.0f), -0.2f, 1e-5);  ++cases;
+    // yields a negative position rather than clamping. Expectation computed
+    // from the window field so the case documents the no-clamp contract without
+    // coupling to the default tuning. -------------------------------------------
+    EXPECT_NEAR(NeedlePosition(m, -15.0f), -15.0f / m.release_window_ms, 1e-5);  ++cases;
 
     if (g_failures == 0) {
         std::printf("hoops_tests: OK (%d cases)\n", cases);

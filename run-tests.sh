@@ -43,8 +43,10 @@ hr; echo "[ci] hoops_tests (C++ ShotMeter)"
 HOOPS_DIR="ci/samples/hoops-brawl-seed/stream"
 if command -v cmake >/dev/null 2>&1; then
     BUILD="$HOOPS_DIR/_build"   # _build/ is gitignored
-    if cmake -S "$HOOPS_DIR" -B "$BUILD" >/dev/null 2>&1 \
-       && cmake --build "$BUILD" --target hoops_tests >/dev/null 2>&1 \
+    # Quiet stdout (configure/build chatter) but let stderr through, so a
+    # configure/compile failure still shows diagnostics rather than nothing.
+    if cmake -S "$HOOPS_DIR" -B "$BUILD" >/dev/null \
+       && cmake --build "$BUILD" --target hoops_tests >/dev/null \
        && ctest --test-dir "$BUILD" --output-on-failure; then
         record PASS "ci/hoops_tests (c++)"
     else

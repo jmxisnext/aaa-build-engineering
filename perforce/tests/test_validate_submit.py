@@ -11,7 +11,6 @@ from __future__ import annotations
 import io
 import os
 import unittest
-from contextlib import redirect_stderr
 from unittest import mock
 
 import _triggerlib as tl
