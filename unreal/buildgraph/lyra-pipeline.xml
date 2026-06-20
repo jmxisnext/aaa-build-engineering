@@ -25,6 +25,8 @@
   <Option Name="CookPlatform"  DefaultValue="Windows"    Description="COOK/target platform name. UE maps build 'Win64' -> cook 'Windows'; BuildCookRun maps it for you but the lower-level Cook task does NOT - pass 'Windows' or the cook commandlet errors 'Invalid target platform (Win64)'. See lessons-learned.md #4."/>
   <Option Name="Configuration" DefaultValue="Development" Description="Build configuration"/>
   <Option Name="ArchiveDir"    DefaultValue="D:\LyraPackaged" Description="Where the shippable build is archived"/>
+  <Option Name="Source"        DefaultValue="teamcity" Description="Orchestrator label stamped into build-info + the metric. TeamCity/standalone leave the default; the Horde stream template overrides it to horde. Threaded into the Stamp node via this option -- NEVER hardcoded 'horde', which would mislabel every TeamCity run that drives this same graph."/>
+  <Option Name="RepoDir"       DefaultValue="J:\jammers-lab\aaa-build-engineering" Description="Repo root, used to resolve the PowerShell wrappers the graph spawns (the stamp script). Matches the absolute-path convention in horde/config/game-main.stream.json."/>
 
   <!-- Reused project arg (quoted to survive spaces) -->
   <Property Name="ProjectArg" Value="-Project=&quot;$(ProjectPath)&quot;"/>
@@ -47,9 +49,19 @@
       <Command Name="BuildCookRun" Arguments="$(ProjectArg) -platform=$(Platform) -clientconfig=$(Configuration) -target=$(GameTarget) -build -skipcook -stage -pak -archive -archivedirectory=&quot;$(ArchiveDir)&quot; -nocompileeditor -unattended -utf8output"/>
     </Node>
 
+    <!-- Rung #5 (in-graph): version-stamp the packaged build with its CL provenance, INSIDE the
+         graph so both orchestrators stamp identically (TeamCity drives this graph via the wrapper;
+         Horde drives the SAME graph via its agent). Source is threaded from the $(Source) Option,
+         never hardcoded: a TeamCity/standalone run stamps the default 'teamcity'; a Horde run, whose
+         stream template passes -set:Source=horde, stamps 'horde'. The stamp writes a metric into
+         unreal/.metrics (the dir collect-metrics.ps1 scans), so the run produces a stamp row. -->
+    <Node Name="Stamp Lyra" Requires="Package Lyra">
+      <Spawn Exe="pwsh" Arguments="-NoProfile -File &quot;$(RepoDir)\unreal\scripts\stamp-lyra-package.ps1&quot; -Source $(Source) -Platform $(Platform) -Configuration $(Configuration) -ArchiveDir &quot;$(ArchiveDir)&quot;"/>
+    </Node>
+
   </Agent>
 
-  <!-- The single name TeamCity (and -Target) asks for; pulls the whole chain. -->
-  <Aggregate Name="Lyra Pipeline" Requires="Package Lyra"/>
+  <!-- The single name TeamCity (and -Target) asks for; pulls the whole chain (now incl. the stamp). -->
+  <Aggregate Name="Lyra Pipeline" Requires="Stamp Lyra"/>
 
 </BuildGraph>

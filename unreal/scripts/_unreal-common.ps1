@@ -97,3 +97,92 @@ function Invoke-TimedBuildStep {
 
   [pscustomobject]@{ Exit = $exit; DurationSec = $dur; LogFile = $logFile; MetricFile = $metricFile }
 }
+
+# Map a source token to its display orchestrator name. Used by the buildgraph wrapper,
+# the stamp script, and the Horde run-metric emitter so the three label runs consistently
+# (the dashboard groups buildgraph metrics by `source`; `orchestrator` is the display name).
+function Get-OrchestratorName {
+  [CmdletBinding()] param([Parameter(Mandatory)][string]$Source)
+  switch ($Source) {
+    'horde'      { 'Horde' }
+    'teamcity'   { 'TeamCity' }
+    'standalone' { 'standalone' }
+    default      { $Source }
+  }
+}
+
+# Assemble the RunUAT BuildGraph argument array. Single source of truth for the wrapper's
+# UAT invocation so the new `-set:Source` threading is testable without an engine. Source is
+# only emitted when supplied: an absent source keeps the existing TeamCity baseline behaviour
+# (collect-metrics defaults a sourceless buildgraph metric to 'teamcity'), so adding the param
+# is a zero-regression change to the green path. The graph's own Source Option (DefaultValue
+# 'teamcity') applies when -set:Source is not passed.
+function Build-BuildGraphArgs {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][string]$Script,
+    [Parameter(Mandatory)][string]$Target,
+    [Parameter(Mandatory)][string]$ProjectPath,
+    [Parameter(Mandatory)][string]$ArchiveDir,
+    [string]$Source,
+    [switch]$ListOnly
+  )
+  $a = @(
+    'BuildGraph',
+    "-Script=$Script",
+    "-Target=$Target",
+    "-set:ProjectPath=$ProjectPath",
+    "-set:ArchiveDir=$ArchiveDir"
+  )
+  if ($Source)   { $a += "-set:Source=$Source" }
+  if ($ListOnly) { $a += '-ListOnly' }
+  return $a
+}
+
+# Build a post-run `step=buildgraph` metric object from already-known job facts (the run
+# already happened, so there is nothing to time -- this is NOT Invoke-TimedBuildStep). This
+# formalizes the 2026-06-13 hand-assembled Horde metric: under Horde the BuildGraph XML runs
+# directly (the wrapper never executes), so the orchestrator-parity row needs an explicit
+# emitter. Returns an [ordered] dict; the caller (emit-run-metric.ps1) serializes it. Fields
+# mirror the shape the dashboard collector reads (step/listOnly/source/target/durationSec/
+# success/utc) plus optional provenance (orchestrator/hordeJobId/hordeServer/changelist/stages).
+function New-RunMetric {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)][ValidateSet('standalone','teamcity','horde')][string]$Source,
+    [Parameter(Mandatory)][double]$DurationSec,
+    [string]$Target = 'Lyra Pipeline',
+    [int]$ExitCode = 0,
+    [string]$Orchestrator,
+    [string]$JobId,
+    [string]$Server,
+    [string]$Changelist,
+    [object[]]$Stages,
+    [string]$Script,
+    [string]$Engine,
+    [string]$Uproject,
+    [string]$Utc
+  )
+  if (-not $Orchestrator) { $Orchestrator = Get-OrchestratorName -Source $Source }
+  if (-not $Utc) { $Utc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+  $m = [ordered]@{
+    track        = 'unreal'
+    step         = 'buildgraph'
+    target       = $Target
+    listOnly     = $false
+    success      = ($ExitCode -eq 0)
+    exitCode     = $ExitCode
+    durationSec  = $DurationSec
+    source       = $Source
+    orchestrator = $Orchestrator
+  }
+  if ($JobId)      { $m['hordeJobId'] = $JobId }
+  if ($Server)     { $m['hordeServer'] = $Server }
+  if ($Changelist) { $m['changelist'] = $Changelist }
+  if ($Script)     { $m['script'] = $Script }
+  if ($Engine)     { $m['engine'] = $Engine }
+  if ($Uproject)   { $m['uproject'] = $Uproject }
+  if ($Stages)     { $m['stages'] = $Stages }
+  $m['utc'] = $Utc
+  return $m
+}

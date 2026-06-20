@@ -28,6 +28,12 @@ param(
   [string]$EnginePath,
   [string]$Uproject,
   [string]$DDCPath = 'D:\UE-DDC',
+  [ValidateSet('standalone','teamcity','horde')]
+  [string]$Source,                           # orchestrator label; threaded to the graph as -set:Source
+                                             #   and stamped into the metric. EMPTY by default -> no
+                                             #   -set:Source and no metric source, preserving the
+                                             #   collector's "absent buildgraph source = teamcity" baseline.
+  [string]$Orchestrator,                     # display name; derived from -Source when omitted
   [switch]$ListOnly,                         # parse + print the graph, do not build
   [switch]$DryRun
 )
@@ -46,14 +52,8 @@ if (-not (Test-Path $uat)) { throw "RunUAT.bat not found: $uat" }
 $Uproject = Find-LyraUproject -Uproject $Uproject
 if (-not $Uproject -or -not (Test-Path $Uproject)) { throw 'Lyra .uproject not found (pass -Uproject).' }
 
-$uatArgs = @(
-  'BuildGraph',
-  "-Script=$Script",
-  "-Target=$Target",
-  "-set:ProjectPath=$Uproject",
-  "-set:ArchiveDir=$ArchiveDir"
-)
-if ($ListOnly) { $uatArgs += '-ListOnly' }
+$uatArgs = Build-BuildGraphArgs -Script $Script -Target $Target -ProjectPath $Uproject `
+  -ArchiveDir $ArchiveDir -Source $Source -ListOnly:$ListOnly
 
 Write-Host "Engine : $EnginePath"
 Write-Host "Script : $Script"
@@ -65,10 +65,17 @@ New-Item -ItemType Directory -Force -Path $DDCPath | Out-Null
 ${env:UE-LocalDataCachePath} = $DDCPath
 
 $mode = if ($ListOnly) { 'listonly' } else { 'run' }
+$metricFields = [ordered]@{ target = $Target; listOnly = [bool]$ListOnly }
+if ($Source) {
+  if (-not $Orchestrator) { $Orchestrator = Get-OrchestratorName -Source $Source }
+  $metricFields['source'] = $Source
+  $metricFields['orchestrator'] = $Orchestrator
+}
+$metricFields['script'] = $Script
 $step = Invoke-TimedBuildStep -Step 'buildgraph' -UnrealDir $unrealDir `
   -BaseName "buildgraph-Lyra-$mode" -Engine $EnginePath -Uproject $Uproject `
   -StartMessage "Starting BuildGraph ($mode)..." `
-  -Metric ([ordered]@{ target = $Target; listOnly = [bool]$ListOnly; script = $Script }) `
+  -Metric $metricFields `
   -Action { param($LogFile) & $uat @uatArgs 2>&1 | Tee-Object -FilePath $LogFile }
 $exit = $step.Exit; $dur = $step.DurationSec
 

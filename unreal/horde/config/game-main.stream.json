@@ -39,6 +39,7 @@
 				"-Script=J:\\jammers-lab\\aaa-build-engineering\\unreal\\buildgraph\\lyra-pipeline.xml",
 				"-set:ProjectPath=G:\\UnrealProjects\\LyraStarterGame\\Lyra.uproject",
 				"-set:ArchiveDir=D:\\LyraPackaged",
+				"-set:Source=horde",
 				"-NoP4"
 			],
 			"parameters": [

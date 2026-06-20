@@ -47,13 +47,16 @@ param(
   [string]$Changelist,                         # CONTENT depot CL; TeamCity: %build.vcs.number%
   [string]$BuildNumber,                        # TeamCity: %build.number%
   [string]$BuildId,                            # TeamCity: %teamcity.build.id%
-  [ValidateSet('standalone','teamcity')]
+  [ValidateSet('standalone','teamcity','horde')]
   [string]$Source       = 'standalone',
+  [string]$Orchestrator,                       # display name; derived from -Source when omitted
   [string]$EnginePath,
   [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '_unreal-common.ps1')
+
+if (-not $Orchestrator) { $Orchestrator = Get-OrchestratorName -Source $Source }
 
 $unrealDir = Split-Path -Parent $PSScriptRoot
 
@@ -92,6 +95,7 @@ $buildInfo = [ordered]@{
   teamcity_build_id     = if ($BuildId) { $BuildId } else { $null }
   built_at_utc          = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
   source                = $Source
+  orchestrator          = $Orchestrator
   archive               = $buildRoot
 }
 $json = $buildInfo | ConvertTo-Json
@@ -137,6 +141,7 @@ $metric = [pscustomobject]@{
   platform         = $Platform
   configuration    = $Configuration
   source           = $Source
+  orchestrator     = $Orchestrator
   buildInfoPath    = $infoInPackage
   sidecarPath      = $sidecar
   success          = $true
