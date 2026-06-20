@@ -1,0 +1,17 @@
+# Code owners — auto-requests review from the maintainer on every PR.
+# Per-track lines are explicit (and identical today) so that if track
+# ownership ever splits across people, only the relevant line changes.
+
+*                 @jmxisnext
+
+/perforce/        @jmxisnext
+/ci/              @jmxisnext
+/accel/           @jmxisnext
+/unreal/          @jmxisnext
+/dashboard/       @jmxisnext
+
+# High-contention shared files — change in a dedicated PR (AGENTS.md §1).
+/AGENTS.md        @jmxisnext
+/CLAUDE.md        @jmxisnext
+/run-tests.sh     @jmxisnext
+/.github/         @jmxisnext
