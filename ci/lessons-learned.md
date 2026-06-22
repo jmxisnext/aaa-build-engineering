@@ -327,12 +327,12 @@ mount collide; each agent needs its own conf dir and name."*
 
 **What happened:** Restarted the stopped TeamCity stack and tried to drive
 the REST API. Scraped the superuser token out of `teamcity-server.log`
-right after `docker compose up`, got `6452109178723932359`, and looped on
+right after `docker compose up`, got `<token>`, and looped on
 `GET /app/rest/server` waiting for the server to come ready. Every call
 came back as the HTML "TeamCity is starting / Initializing server
 components" maintenance page; after ~4 minutes the script declared "NOT
 READY." But the server *was* ready — the log showed it serving REST and
-even printing a *different* token, `4364370803413132753`, over and over.
+even printing a *different* token, `<token>`, over and over.
 
 **Two compounding root causes:**
 
