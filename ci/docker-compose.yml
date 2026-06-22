@@ -8,6 +8,9 @@
 # named/anonymous volumes). A true reset deletes ./data/teamcity_server/datadir,
 # or (config-only) delete the AAASandbox project and re-run bootstrap-builds.ps1.
 # See ci/lessons-learned.md #9.
+#
+# Version pinning: TEAMCITY_VERSION is set in ci/.env (auto-loaded by compose) so the
+# server+agents stay on a fixed release. Change the pin there, never rely on :-latest.
 
 services:
   teamcity-server:
