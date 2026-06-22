@@ -34,41 +34,53 @@ When the next heavy session opens, **every offline prerequisite is already built
 
 | Item | Tag | Done when |
 |---|---|---|
-| `unreal/scripts/horde-preflight.ps1` — automate the 8-item session-start checklist; optionally start p4d + agent; exit non-zero on any red | 🟢 | Running it on a cold box reports every checklist item PASS/FAIL and (with a `-Start` switch) brings p4d + agent up; exits 0 only when the box is run-ready |
-| CSRF fix in `bench-agents.ps1` (+ factor a shared CSRF-aware `Invoke-TC` helper) | 🔧🟢 | Bench script issues all writes with a per-session CSRF token; the helper is the single REST-write path |
-| Heavy-session runbook (`docs/HEAVY_SESSION_RUNBOOK.md`) — serialization order (UE+Horde+agent never concurrent with TeamCity/Docker, 31 GB ceiling), drive placement (DDC→D:, installs→G:, source→J:), bring-up/tear-down sequence | ⚡📋 | One page; each heavy run links to it |
+| `unreal/scripts/horde-preflight.ps1` — automate the 8-item session-start checklist; **bake the serialization guardrails in as enforced checks** (refuse to run if the TeamCity/Docker stack is up; warn on low free RAM vs the 31 GB ceiling; assert DDC→D:/installs→G:/source→J:); optionally start p4d + agent | 🟢⚡ | On a cold box: reports every checklist item PASS/FAIL, blocks on a guardrail violation, and (with `-Start`) brings p4d + agent up; exits 0 only when run-ready |
+| CSRF fix in `bench-agents.ps1` (the necessary fix). Extract a shared `Invoke-TC` helper **only if a clean lift** — do not rewrite the two already-working scripts | 🔧 | `bench-agents.ps1` issues writes with a per-session CSRF token; the next bench run survives a 2026.x server |
 | Cooker dep-graph edges in `.toc` + `--dry-run` mode (TDD) | 🟢 | `.toc` carries character→asset edges; `cook.py --dry-run` computes cook-keys, reports would-recook, writes nothing; new unittests RED→GREEN |
 | Correct stale `horde/README.md` item-4 status | 🔧 | README reflects in-graph stamp = parity authored |
 | Pin `TEAMCITY_VERSION` in `ci/docker-compose.yml` | 🟢 | Explicit build pinned; drift note removed |
 
-### 3.2 Per-run offline pieces
+> Sanity-pass change: the standalone "heavy-session runbook" doc was dropped — its rules become **enforced guardrails inside `horde-preflight.ps1`** (executable > prose, and avoids duplicating ROADMAP_NEXT "Hardware reality" + the `dev-machine-specs` memory).
+
+### 3.2 Per-run offline pieces — IN this campaign
 
 | Heavy run | Item | Tag | Done when |
 |---|---|---|---|
-| Shared DDC | Configure shared DDC — **default: local `UE-SharedDataCachePath` folder on D:\ scratch** (simplest, fully offline-configurable; Zen Server is the noted alternative if a CAS-backed story is wanted later) so TeamCity + Horde cooks share one cache; document "warm once, reuse" | ⚡📋 | Config committed + both cook paths point at the D:\ shared folder; warm-fill procedure documented |
-| CI cook wiring | `RUN pip install pillow` (+ python3) in `ci/agent/Dockerfile` | 🟢 | Image builds; `python3 -c "import PIL"` green at build time |
-| CI cook wiring | Cooker "pack `cooked/` + `.toc` → single `.pak`" mode (TDD) | 🟢📋 | `cook.py --pack out.pak` produces a `.pak` matching the CI Package contract; tests green |
+| Shared DDC | **(Batch 1 — pulled forward)** Configure shared DDC — **default: local `UE-SharedDataCachePath` folder on D:\ scratch** (simplest, fully offline; both cooks run on WS01 so a local folder is genuinely shared between them. Zen Server parked as its own demo — seed). Both cook paths point at it; document "warm once, reuse" | ⚡📋 | Config committed + both TeamCity and Horde cook envs point at the D:\ shared folder; warm-fill procedure documented |
+| CI cook wiring | `RUN pip install pillow` (+ python3) in `ci/agent/Dockerfile`; `docker build` + `import PIL` smoke (**LIGHT — in-campaign, not gated**) | 🟢 | Image builds; `python3 -c "import PIL"` green at build time |
+| CI cook wiring | Cooker pack-to-`.pak` mode — **clustered with the cooker work in §3.1** (dep-edges + `--dry-run` + pack land together) | 🟢 | `cook.py --pack out.pak` matches the CI Package single-`.pak` contract; tests green |
 | CI cook wiring | Plan `cooked/`+cook-index persistence across CI runs (checkout reuse / artifact cache) | 📋 | Documented; enables a warm-vs-cold CI cook number |
-| Pre-flight builds | Write the pre-flight spec (shelve trigger → personal builds → optional Swarm gate) | 📋 | `2026-06-21-*` spec committed |
-| Pre-flight builds | Author shelve-trigger script + personal-build config | 🟢 | Scripted offline; ready to validate when stack is up |
-| Capstone | Capstone orchestration design + repo-as-demo narrative + Zen/DDC writeup outline | 📋 | Design committed |
-| Capstone | Ephemeral/containerized agent Dockerfile (opp #4) | 🟢 | Dockerfile builds an agent image that registers + tears down |
 
-## 4. Sequencing (Approach A)
+### 3.3 Deferred to their own brainstorm → spec → plan cycle (NOT executed here)
 
-1. **Cross-cutting (§3.1)** — `horde-preflight.ps1`, CSRF fix + shared helper, heavy-session runbook, cooker dep-edges + `--dry-run`, README status fix, version pin.
-2. **Shared DDC config** (§3.2) — the single biggest optimizer; unblocks both finish-Horde and CI-cook warm numbers.
-3. **CI cook wiring offline pieces** (Dockerfile, pack-to-`.pak`, persistence plan).
-4. **Pre-flight spec + scripts.**
-5. **Capstone design + ephemeral-agent Dockerfile.**
+Pre-flight/gated builds and the Capstone are each **new features**, not prep — each deserves its own design pass, so this campaign writes no thin stubs for them. They re-enter via `brainstorming` when reached:
 
-Each step is committable independently; the gated ⛔ runs are NOT attempted in this campaign.
+- **Pre-flight / gated builds** — shelve trigger → personal builds → optional Swarm gate (own spec + script).
+- **Capstone stitch** — end-to-end orchestration, repo-as-demo, ephemeral/containerized agent (opp #4), Zen/DDC writeup.
+
+## 4. Sequencing (Approach A, refined by the sanity pass)
+
+**Batch 1 — make the imminent Horde run turnkey AND warm (offline config/scripts):**
+`horde-preflight.ps1` (checklist + serialization guardrails) · shared-DDC config · CSRF fix in `bench-agents.ps1` · README item-4 status fix · pin `TEAMCITY_VERSION`.
+
+**Batch 2 — the cooker cluster (Python/TDD; serves CI-cook *and* the future WPF tool):**
+dep-graph edges in `.toc` · `--dry-run` · pack-to-`.pak`.
+
+**Batch 3 — CI cook wiring offline pieces:**
+`ci/agent/Dockerfile` pillow + image smoke · `cooked/`+index persistence plan.
+
+**Then (own brainstorm cycles, see §3.3):** pre-flight spec, Capstone design.
+
+Each batch is independently committable; the gated ⛔ runs are NOT attempted in this campaign.
 
 ## 5. Explicitly gated (out of offline scope)
 
-These wait for a heavy session and are the *only* things that should remain after this campaign: the live Horde run + real-facts `emit-run-metric`; the DDC warm-fill cook; CI-stack validation of the wired cooker; live p4d+TeamCity validation of the shelve trigger; the Capstone end-to-end run.
+These wait for a heavy session and are the *only* things that should remain after this campaign: the live Horde run + real-facts `emit-run-metric`; the DDC **warm-fill cook**; the **full TeamCity-DAG cook** validating the wired cooker (the agent-image `docker build` itself is light and done in-campaign); live p4d+TeamCity validation of the shelve trigger; the Capstone end-to-end run.
+
+(`horde-preflight.ps1`'s all-green path self-confirms at the start of the next heavy session — cheap, not a separate gated task.)
 
 ## 6. Success criterion / non-goals
 
 - **Success:** every 🟢⚡🔧📋 item above is committed and (where runnable offline) verified green; opening a heavy session means running preflight → the gated run, nothing else.
-- **Non-goals:** no game/gameplay work; no second-engine (Unity) arm (post-Capstone, per seed 2026-06-17); no Chronicle-kernel work (separate repo); the WPF artist tool GUI build is *not* in scope here (its cooker-side prerequisites — dep-edges, `--dry-run` — are, as cross-cutting items).
+- **Non-goals:** no game/gameplay work; no second-engine (Unity) arm (post-Capstone, per seed 2026-06-17); no Chronicle-kernel work (separate repo); the WPF artist tool GUI build is *not* in scope here — it is light and independently buildable anytime (not a resource-heavy run), and its cooker-side prerequisites (dep-edges, `--dry-run`) ride along as cross-cutting items.
+- **Parked seed (this session):** stand up **Zen Server** as its own CAS-backed-DDC mechanics demo — distinct from the local shared-folder DDC used here for the cook-warm optimization.
