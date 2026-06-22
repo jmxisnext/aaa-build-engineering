@@ -24,7 +24,7 @@ When the next heavy session opens, **every offline prerequisite is already built
 - **Pre-flight / gated builds** — post-commit VCS trigger exists (`2026-06-03-vcs-trigger-design.md`); pre-flight (shelve trigger + personal builds) was explicitly scoped out (§8 of that spec).
 - **Capstone (Step 4)** — nothing built.
 - **Cooker internals** — `cook.py` flags are `--src/--out/--force/--stats-json`; **no `--dry-run`**. `manifest.toc.json` serializes per-asset entries but **no character→asset dependency edges**.
-- **Latent bug** — `bench-agents.ps1` does write-REST without an `X-TC-CSRF-Token` (same bug already fixed in `bootstrap-builds.ps1` + `setup-vcs-trigger.ps1`); it will fail on the next bench run against a TeamCity 2026.x server.
+- **CSRF on writes — already fixed (verified 2026-06-21).** `ci/scripts/_ci-common.ps1` `Invoke-TC` sends `X-TC-CSRF-Token` on every POST/PUT/DELETE, and `bench-agents.ps1` already dot-sources it and routes all writes through it. The SEEDS.md line-16 hypothesis ("very likely has the bug") is disproven by ground truth — no work needed.
 
 ## 3. The prep ledger
 
@@ -35,7 +35,7 @@ When the next heavy session opens, **every offline prerequisite is already built
 | Item | Tag | Done when |
 |---|---|---|
 | `unreal/scripts/horde-preflight.ps1` — automate the 8-item session-start checklist; **bake the serialization guardrails in as enforced checks** (refuse to run if the TeamCity/Docker stack is up; warn on low free RAM vs the 31 GB ceiling; assert DDC→D:/installs→G:/source→J:); optionally start p4d + agent | 🟢⚡ | On a cold box: reports every checklist item PASS/FAIL, blocks on a guardrail violation, and (with `-Start`) brings p4d + agent up; exits 0 only when run-ready |
-| CSRF fix in `bench-agents.ps1` (the necessary fix). Extract a shared `Invoke-TC` helper **only if a clean lift** — do not rewrite the two already-working scripts | 🔧 | `bench-agents.ps1` issues writes with a per-session CSRF token; the next bench run survives a 2026.x server |
+| ~~CSRF fix in `bench-agents.ps1`~~ **ALREADY DONE (verified 2026-06-21)** — `_ci-common.ps1` `Invoke-TC` sends the CSRF token on writes; bench-agents already routes through it | ✅ | n/a — no work; SEEDS.md line-16 hypothesis disproven |
 | Cooker dep-graph edges in `.toc` + `--dry-run` mode (TDD) | 🟢 | `.toc` carries character→asset edges; `cook.py --dry-run` computes cook-keys, reports would-recook, writes nothing; new unittests RED→GREEN |
 | Correct stale `horde/README.md` item-4 status | 🔧 | README reflects in-graph stamp = parity authored |
 | Pin `TEAMCITY_VERSION` in `ci/docker-compose.yml` | 🟢 | Explicit build pinned; drift note removed |
@@ -61,7 +61,7 @@ Pre-flight/gated builds and the Capstone are each **new features**, not prep —
 ## 4. Sequencing (Approach A, refined by the sanity pass)
 
 **Batch 1 — make the imminent Horde run turnkey AND warm (offline config/scripts):**
-`horde-preflight.ps1` (checklist + serialization guardrails) · shared-DDC config · CSRF fix in `bench-agents.ps1` · README item-4 status fix · pin `TEAMCITY_VERSION`.
+`horde-preflight.ps1` (checklist + serialization guardrails) · shared-DDC config · README item-4 status fix · pin `TEAMCITY_VERSION`. (CSRF: already done — verified.)
 
 **Batch 2 — the cooker cluster (Python/TDD; serves CI-cook *and* the future WPF tool):**
 dep-graph edges in `.toc` · `--dry-run` · pack-to-`.pak`.
