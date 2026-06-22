@@ -68,4 +68,20 @@ $mU = Merge-Feed -New $null -Prior $priorU
 Assert-True  $mU.stale                  'unreal fallback marks stale'
 Assert-Equal '44' $mU.stamp.changelist  'unreal fallback reuses the prior stamp'
 
+# ConvertFrom-PipelineMetrics: latest cook-stats record -> the dashboard 'pipeline' section
+$pm = @(
+  [pscustomobject]@{ textures_cooked=4; textures_cached=0; audio_cooked=2; audio_cached=0; characters_cooked=2; characters_cached=0; total_bytes=144428; elapsed_sec=0.05; utc='2026-06-22T10:00:00Z' }  # cold
+  [pscustomobject]@{ textures_cooked=0; textures_cached=4; audio_cooked=0; audio_cached=2; characters_cooked=0; characters_cached=2; total_bytes=144428; elapsed_sec=0.006; utc='2026-06-22T10:05:00Z' } # warm (newer)
+)
+$pf = ConvertFrom-PipelineMetrics -Metrics $pm
+Assert-Equal 0   $pf.cooked     'latest record wins: warm run cooked 0'
+Assert-Equal 8   $pf.cached     'warm run cached all 8 (4+2+2)'
+Assert-True  $pf.warm           'warm flag set when cooked==0 and cached>0'
+Assert-Equal 144428 $pf.totalBytes 'carries total bytes'
+
+$pfCold = ConvertFrom-PipelineMetrics -Metrics @($pm[0])
+Assert-True  (-not $pfCold.warm) 'cold run (cached 0) is not warm'
+
+Assert-True  ($null -eq (ConvertFrom-PipelineMetrics -Metrics @())) 'no metrics -> null section'
+
 Assert-Summary

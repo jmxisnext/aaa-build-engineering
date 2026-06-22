@@ -13,7 +13,8 @@ param(
     [string]$ProjectId = "AAASandbox",
     [int]   $Count     = 50,
     [string]$MetricsDir       = (Join-Path $PSScriptRoot "..\..\accel\.metrics"),
-    [string]$UnrealMetricsDir = (Join-Path $PSScriptRoot "..\..\unreal\.metrics"),
+    [string]$UnrealMetricsDir    = (Join-Path $PSScriptRoot "..\..\unreal\.metrics"),
+    [string]$PipelineMetricsDir  = (Join-Path $PSScriptRoot "..\..\pipeline\.metrics"),
     [string]$Out        = (Join-Path $PSScriptRoot "..\data\snapshot.json")
 )
 $ErrorActionPreference = "Stop"
@@ -125,6 +126,36 @@ function Get-UnrealFeed {
     ConvertFrom-UnrealMetrics -Metrics @($metrics)
 }
 
+function ConvertFrom-PipelineMetrics {
+    # Pure transform: parsed pipeline/.metrics cook-stats records -> the 'pipeline' section.
+    # Latest record by utc. 'warm' = a run that recooked nothing but reused something.
+    param([object[]]$Metrics)
+    if (-not $Metrics) { return $null }
+    $latest = $Metrics | Sort-Object { [datetime]$_.utc } | Select-Object -Last 1
+    if (-not $latest) { return $null }
+    $cooked = [int]$latest.textures_cooked + [int]$latest.audio_cooked + [int]$latest.characters_cooked
+    $cached = [int]$latest.textures_cached + [int]$latest.audio_cached + [int]$latest.characters_cached
+    [pscustomobject]@{
+        stale      = $false
+        cooked     = $cooked
+        cached     = $cached
+        totalBytes = [int]$latest.total_bytes
+        elapsedSec = [double]$latest.elapsed_sec
+        warm       = ($cooked -eq 0 -and $cached -gt 0)
+        utc        = $latest.utc
+    }
+}
+
+function Get-PipelineFeed {
+    param([string]$Dir)
+    if (-not (Test-Path $Dir)) { return $null }
+    $metrics = foreach ($f in Get-ChildItem $Dir -Filter *.json -ErrorAction SilentlyContinue) {
+        try { Get-Content $f.FullName -Raw | ConvertFrom-Json } catch { }
+    }
+    if (-not $metrics) { return $null }
+    ConvertFrom-PipelineMetrics -Metrics @($metrics)
+}
+
 function Merge-Feed {
     param($New, $Prior)
     if ($null -ne $New) { return $New }
@@ -154,7 +185,7 @@ function Get-PerforceFeed {
 }
 
 function Invoke-Main {
-    param($BaseUrl, $Token, $ProjectId, $Count, $MetricsDir, $UnrealMetricsDir, $Out)
+    param($BaseUrl, $Token, $ProjectId, $Count, $MetricsDir, $UnrealMetricsDir, $PipelineMetricsDir, $Out)
     $prior = if (Test-Path $Out) { Get-Content $Out -Raw | ConvertFrom-Json } else { $null }
     if (-not $Token) { $Token = $env:TEAMCITY_TOKEN }
 
@@ -165,6 +196,7 @@ function Invoke-Main {
     $p4 = $null
     try { $p4 = Get-PerforceFeed } catch { Write-Warning "perforce feed: $($_.Exception.Message)" }
     $unreal = Get-UnrealFeed -Dir $UnrealMetricsDir   # local files, no infra
+    $pipeline = Get-PipelineFeed -Dir $PipelineMetricsDir   # local files, no infra
 
     $snap = [ordered]@{
         generatedUtc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
@@ -172,11 +204,12 @@ function Invoke-Main {
         accel    = Merge-Feed -New $accel  -Prior $prior.accel
         perforce = Merge-Feed -New $p4     -Prior $prior.perforce
         unreal   = Merge-Feed -New $unreal -Prior $prior.unreal
+        pipeline = Merge-Feed -New $pipeline -Prior $prior.pipeline
     }
     $snap | ConvertTo-Json -Depth 8 | Set-Content -Path $Out -Encoding ascii
     Write-Host "wrote $Out (ci stale=$($snap.ci.stale) accel=$([bool]$snap.accel) perforce stale=$($snap.perforce.stale) unreal stale=$($snap.unreal.stale))"
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
-    Invoke-Main -BaseUrl $BaseUrl -Token $Token -ProjectId $ProjectId -Count $Count -MetricsDir $MetricsDir -UnrealMetricsDir $UnrealMetricsDir -Out $Out
+    Invoke-Main -BaseUrl $BaseUrl -Token $Token -ProjectId $ProjectId -Count $Count -MetricsDir $MetricsDir -UnrealMetricsDir $UnrealMetricsDir -PipelineMetricsDir $PipelineMetricsDir -Out $Out
 }

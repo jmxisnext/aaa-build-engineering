@@ -45,6 +45,9 @@ dashboard/_preview.html
 pipeline/assets/
 pipeline/cooked/
 
+# Track 5 cook metrics (re-generatable; fed to the dashboard like accel/unreal .metrics)
+pipeline/.metrics/
+
 # Environment files — never commit real secrets. ci/.env is intentionally tracked
 # (contains only TEAMCITY_VERSION); re-include it explicitly.
 **/.env
