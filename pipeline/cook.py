@@ -64,6 +64,9 @@ def main(argv=None):
     print(f"  toc: {st.toc_path}")
 
     if args.stats_json:
+        stats_dir = os.path.dirname(args.stats_json)
+        if stats_dir:
+            os.makedirs(stats_dir, exist_ok=True)
         with open(args.stats_json, "w", encoding="utf-8") as f:
             json.dump(dataclasses.asdict(st), f, indent=2, sort_keys=True)
         print(f"  stats: {args.stats_json}")
