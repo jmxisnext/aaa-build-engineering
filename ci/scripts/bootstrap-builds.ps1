@@ -191,6 +191,29 @@ function Add-ArtifactDep {
     Invoke-TC POST "/app/rest/buildTypes/id:$BuildTypeId/artifact-dependencies" -Body $body | Out-Null
 }
 
+# Self artifact-dependency for the warm cache: restore THIS build config's own
+# last-successful artifact (the CAS) before it runs. revisionName=lastSuccessful so
+# it does NOT require a same-chain build; cleanDestinationDirectory=false so the
+# restored CAS is overlaid, not wiped. On the first-ever build no successful build
+# exists yet -> TeamCity resolves nothing and the cook runs cold (validated in the
+# gated run; the cached>0 guard covers a misconfigured round-trip).
+function Add-SelfArtifactDep {
+    param([string]$BuildTypeId, [string]$PathRules)
+    $body = @{
+        type               = "artifact_dependency"
+        "source-buildType" = @{ id = $BuildTypeId }   # self
+        properties         = @{
+            property = @(
+                @{ name = "pathRules";                 value = $PathRules },
+                @{ name = "revisionName";              value = "lastSuccessful" },
+                @{ name = "revisionValue";             value = "latest.lastSuccessful" },
+                @{ name = "cleanDestinationDirectory"; value = "false" }
+            )
+        }
+    }
+    Invoke-TC POST "/app/rest/buildTypes/id:$BuildTypeId/artifact-dependencies" -Body $body | Out-Null
+}
+
 function Set-ArtifactRules {
     param([string]$BuildTypeId, [string]$Rules)
     Invoke-TC PUT "/app/rest/buildTypes/id:$BuildTypeId/settings/artifactRules" `
@@ -275,6 +298,9 @@ foreach ($cfg in $configs) {
     }
     foreach ($ad in $cfg.ArtifactDeps) {
         Add-ArtifactDep -BuildTypeId $id -UpstreamId $ad.UpstreamId -PathRules $ad.PathRules
+    }
+    if ($cfg.WarmCacheArtifact) {
+        Add-SelfArtifactDep -BuildTypeId $id -PathRules $cfg.WarmCacheArtifact.PathRules
     }
     if ($cfg.ArtifactRules) {
         Set-ArtifactRules -BuildTypeId $id -Rules $cfg.ArtifactRules

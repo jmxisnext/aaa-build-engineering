@@ -61,5 +61,34 @@ function Get-SandboxBuildConfigs {
             # glob so the changelist-stamped tarball name (hoops-brawl-cl<N>.tar.gz) is captured
             ArtifactRules = "+:hoops-brawl-cl*.tar.gz"
         }
+        @{
+            Id            = "AAASandbox_CookAssets"
+            Name          = "Cook Assets"
+            # Standalone: the real cooker is pure Python+Pillow (in the agent image),
+            # so it needs no C++ Compile. The self artifact-dep (WarmCacheArtifact)
+            # restores the prior build's CAS into pipeline/cooked before this runs.
+            Steps         = @(
+                @{ Name = "cook (warm-cacheable)"; Script = @'
+set -e
+# WARM=1 iff a prior CAS was restored by the artifact dependency (index present + non-empty).
+WARM=0; [ -s pipeline/cooked/.cookindex.json ] && WARM=1
+python3 pipeline/scripts/make-samples.py
+python3 pipeline/cook.py --pack Cooked-assets.pak --stats-json pipeline/.metrics/cook-%build.number%.json
+if [ "$WARM" = "1" ]; then
+  CACHED=$(python3 -c "import json;d=json.load(open('pipeline/.metrics/cook-%build.number%.json'));print(d['textures_cached']+d['audio_cached']+d['characters_cached'])")
+  echo "warm build: cached=$CACHED"
+  [ "$CACHED" -gt 0 ] || { echo 'FAIL: warm build recooked everything - the cache index did not survive the artifact round-trip'; exit 1; }
+else
+  echo "cold build (no prior CAS restored) - warm-cache guard skipped"
+fi
+'@ }
+            )
+            SnapshotDeps  = @()
+            ArtifactDeps  = @()
+            # Self artifact-dependency: restore THIS config's last successful CAS.
+            WarmCacheArtifact = @{ PathRules = "cooked.zip!** => pipeline/cooked" }
+            # Directory-form publish so the .cookindex.json DOTFILE is archived (spec §6).
+            ArtifactRules = "+:pipeline/cooked => cooked.zip`n+:Cooked-assets.pak`n+:pipeline/.metrics/cook-*.json => cook-stats"
+        }
     )
 }
