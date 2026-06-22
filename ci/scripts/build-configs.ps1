@@ -48,6 +48,9 @@ function Get-SandboxBuildConfigs {
                 @{ Name = "stage";         Script = "cmake --install build --prefix dist" }
                 @{ Name = "bundle pak";    Script = "cp Cooked.pak dist/Cooked.pak" }
                 @{ Name = "version stamp"; Script = $VersionStampScript }
+                # rm stale tarballs first: the agent reuses its checkout dir across builds,
+                # so a previous build's hoops-brawl-cl<N>.tar.gz would otherwise linger and
+                # get swept up by the glob artifact rule (published two tarballs once). (lesson #12)
                 @{ Name = "tarball";       Script = "rm -f hoops-brawl-cl*.tar.gz; tar czf hoops-brawl-cl%build.vcs.number%.tar.gz dist" }
             )
             SnapshotDeps  = @("AAASandbox_SmokeTest", "AAASandbox_CookData")
@@ -55,6 +58,7 @@ function Get-SandboxBuildConfigs {
                 @{ UpstreamId = "AAASandbox_Compile";  PathRules = "build.zip!** => build" }
                 @{ UpstreamId = "AAASandbox_CookData"; PathRules = "Cooked.pak" }
             )
+            # glob so the changelist-stamped tarball name (hoops-brawl-cl<N>.tar.gz) is captured
             ArtifactRules = "+:hoops-brawl-cl*.tar.gz"
         }
     )
