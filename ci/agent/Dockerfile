@@ -1,6 +1,6 @@
-# Custom TeamCity Linux Build Agent — stock image + Perforce CLI + C++ toolchain.
+# Custom TeamCity Linux Build Agent — stock image + Perforce CLI + C++ toolchain + Python/Pillow.
 #
-# Two reasons this image exists:
+# Three reasons this image exists:
 #
 # 1. Perforce CLI. TeamCity's Perforce VCS root has two execution paths:
 #    server-side Java client (VCS polling + Test Connection) and agent-side
@@ -12,7 +12,11 @@
 #    g++, no make. The seed project at //game/main is C++ + CMake, so
 #    the Compile stage needs the toolchain present before it can run.
 #
-# Both items are pinned where possible: p4 to the same family as the
+# 3. Python 3 + Pillow. The Cook Data stage runs the Track-5 cooker
+#    (pipeline/cook.py), which needs Python 3 + Pillow (texture mips). The
+#    stock image has neither, so a cook step would fail at import time.
+#
+# p4 and the C++ toolchain are pinned where possible: p4 to the same family as the
 # Track 1 broker (P4BROKER/NTX64/2025.2), and the OS toolchain to whatever
 # the base image's Ubuntu repos pin at build time (`apt-get install`
 # without a version pin — acceptable for a sandbox, would be pinned with
@@ -47,5 +51,16 @@ RUN curl -fsSL "https://filehost.perforce.com/perforce/${P4_RELEASE}/${P4_PLATFO
       -o /usr/local/bin/p4 \
  && chmod +x /usr/local/bin/p4 \
  && /usr/local/bin/p4 -V
+
+# Python 3 + Pillow for the Cook Data stage (Track-5 cooker, pipeline/cook.py).
+# Modern Pillow ships manylinux wheels, so no libjpeg/zlib -dev build deps are
+# needed. PEP 668 marks the system Python "externally managed", so installing
+# system-wide into this dedicated agent image needs --break-system-packages.
+# The build-time `import PIL` fails the image build loudly if the wheel didn't land.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-pip \
+ && pip3 install --no-cache-dir --break-system-packages pillow \
+ && rm -rf /var/lib/apt/lists/* \
+ && python3 -c "import PIL; print('Pillow', PIL.__version__)"
 
 USER buildagent
