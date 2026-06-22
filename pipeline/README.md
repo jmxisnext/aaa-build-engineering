@@ -64,6 +64,24 @@ python -m unittest discover -s pipeline/tests -t pipeline   # all
 python pipeline/tests/test_pipeline.py                       # the end-to-end proof, alone
 ```
 
+## CI integration
+
+The cooker runs in CI as the TeamCity **Cook Assets** stage (`AAASandbox_CookAssets`,
+see `ci/`). It is also gated on every push by GitHub Actions
+(`.github/workflows/tests.yml` → `pipeline-cooker`) and by `run-tests.sh`.
+
+Reproduce the CI cook locally:
+
+```bash
+python pipeline/scripts/make-samples.py
+python pipeline/cook.py --pack Cooked-assets.pak --stats-json pipeline/.metrics/cook-local.json
+# run again: warm cache -> "cooked 0 / cached 8"
+python pipeline/cook.py --pack Cooked-assets.pak --stats-json pipeline/.metrics/cook-local.json
+```
+
+Cook stats in `pipeline/.metrics/` feed the dashboard "Cook (Track 5)" panel via
+`dashboard/scripts/collect-metrics.ps1`.
+
 ## Out of scope (this slice)
 
 - **C# WPF artist tool** (roadmap step 3) — pick folder, view the dep graph, trigger a cook,

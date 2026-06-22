@@ -73,6 +73,20 @@ Test failed → the notifier wrote the record above → fix-forward at CL 46 →
 by hand, on a schedule, or as a post-chain step. (The roadmap's "file-write" option; same
 REST-driven, no-SMTP/plugin pattern as `bootstrap-builds.ps1`.)
 
+## Cook Assets — real cooker, warm-cached
+
+`AAASandbox_CookAssets` is a standalone config (no dependency on the C++ Compile
+chain) that regenerates the synthetic Track-5 assets and runs the real
+content-addressed cooker (`pipeline/cook.py --pack`). It persists its `pipeline/cooked/`
+CAS across builds via a **self artifact-dependency** (last successful build →
+`cooked.zip` → `pipeline/cooked`), so a build that changes nothing reuses every
+asset (cache hit). A guard fails the build if a warm run recooks everything (the
+cache index `.cookindex.json` must survive the `cooked.zip` round-trip — it is a
+dotfile, hence the directory-form artifact rule `pipeline/cooked => cooked.zip`).
+
+The chain config now lives in `ci/scripts/build-configs.ps1` (`Get-SandboxBuildConfigs`,
+unit-tested by `ci/tests/build-configs.Tests.ps1`); `bootstrap-builds.ps1` consumes it.
+
 ## Bring up / tear down
 
 ```powershell
