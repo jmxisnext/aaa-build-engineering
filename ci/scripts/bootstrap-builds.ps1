@@ -43,6 +43,7 @@ $ErrorActionPreference = "Stop"
 # ---------- auth + REST plumbing (shared: _ci-common.ps1) ----------
 
 . (Join-Path $PSScriptRoot '_ci-common.ps1')
+. (Join-Path $PSScriptRoot 'build-configs.ps1')
 $tc = Connect-TeamCity -BaseUrl $BaseUrl -Token $Token
 
 # ---------- REST helpers ----------
@@ -224,63 +225,7 @@ echo "---- build-info.json (P4 changelist stamp) ----"
 cat dist/build-info.json
 '@
 
-$configs = @(
-    @{
-        Id            = "AAASandbox_Compile"
-        Name          = "Compile"
-        Steps         = @(
-            @{ Name = "cmake configure"; Script = "cmake -B build -S . -DCMAKE_BUILD_TYPE=Release" }
-            @{ Name = "cmake build";     Script = "cmake --build build --parallel" }
-        )
-        SnapshotDeps  = @()
-        ArtifactDeps  = @()
-        ArtifactRules = "+:build => build.zip"
-    }
-    @{
-        Id            = "AAASandbox_SmokeTest"
-        Name          = "Smoke Test"
-        Steps         = @(
-            @{ Name = "ctest"; Script = "ctest --test-dir build --output-on-failure" }
-        )
-        SnapshotDeps  = @("AAASandbox_Compile")
-        ArtifactDeps  = @(
-            @{ UpstreamId = "AAASandbox_Compile"; PathRules = "build.zip!** => build" }
-        )
-        ArtifactRules = ""
-    }
-    @{
-        Id            = "AAASandbox_CookData"
-        Name          = "Cook Data"
-        Steps         = @(
-            @{ Name = "cook"; Script = "build/Tools/Cooker/hoops_cooker Data Cooked.pak" }
-        )
-        SnapshotDeps  = @("AAASandbox_Compile")
-        ArtifactDeps  = @(
-            @{ UpstreamId = "AAASandbox_Compile"; PathRules = "build.zip!** => build" }
-        )
-        ArtifactRules = "+:Cooked.pak"
-    }
-    @{
-        Id            = "AAASandbox_Package"
-        Name          = "Package"
-        Steps         = @(
-            @{ Name = "stage";         Script = "cmake --install build --prefix dist" }
-            @{ Name = "bundle pak";    Script = "cp Cooked.pak dist/Cooked.pak" }
-            @{ Name = "version stamp"; Script = $versionStampScript }
-            # rm stale tarballs first: the agent reuses its checkout dir across builds,
-            # so a previous build's hoops-brawl-cl<N>.tar.gz would otherwise linger and
-            # get swept up by the glob artifact rule (published two tarballs once). (lesson #12)
-            @{ Name = "tarball";       Script = "rm -f hoops-brawl-cl*.tar.gz; tar czf hoops-brawl-cl%build.vcs.number%.tar.gz dist" }
-        )
-        SnapshotDeps  = @("AAASandbox_SmokeTest", "AAASandbox_CookData")
-        ArtifactDeps  = @(
-            @{ UpstreamId = "AAASandbox_Compile";  PathRules = "build.zip!** => build" }
-            @{ UpstreamId = "AAASandbox_CookData"; PathRules = "Cooked.pak" }
-        )
-        # glob so the changelist-stamped tarball name (hoops-brawl-cl<N>.tar.gz) is captured
-        ArtifactRules = "+:hoops-brawl-cl*.tar.gz"
-    }
-)
+$configs = Get-SandboxBuildConfigs -VersionStampScript $versionStampScript
 
 # ---------- apply ----------
 
