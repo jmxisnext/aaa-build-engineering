@@ -8,7 +8,6 @@ import unittest
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))  # pipeline/ on path
 import cook  # noqa: E402
-from cooker import pipeline  # noqa: E402  (to build a tiny source tree)
 from PIL import Image  # noqa: E402
 
 
