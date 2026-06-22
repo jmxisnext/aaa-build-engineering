@@ -47,6 +47,9 @@ Assert-Match 'Orchestrator parity'              $html 'has the Horde-vs-TeamCity
 Assert-Match 'horde'                            $html 'renders the Horde orchestrator row'
 Assert-Match 'teamcity'                         $html 'renders the TeamCity orchestrator row'
 Assert-Match '1711'                             $html 'renders the Horde end-to-end duration'
+# ---- Track-5 cook panel ----
+Assert-Match 'Cook \(Track 5\)' $html 'has the Track-5 cook panel'
+Assert-Match 'cached'           $html 'cook panel shows cache hits'
 # self-contained: no external script/style/CDN (xmlns + localhost build links are OK)
 Assert-NotMatch '<script'                       $html 'no <script> tags'
 Assert-NotMatch '<link\s'                       $html 'no <link> stylesheet refs'

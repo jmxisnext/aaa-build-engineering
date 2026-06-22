@@ -45,5 +45,14 @@
       {"source":"teamcity","target":"Lyra Pipeline","durationSec":62.2,"success":true,"utc":"2026-06-05T02:32:49Z"},
       {"source":"horde","target":"Lyra Pipeline","durationSec":1711.0,"success":true,"utc":"2026-06-13T19:11:54Z"}
     ]
+  },
+  "pipeline": {
+    "stale": false,
+    "cooked": 0,
+    "cached": 8,
+    "totalBytes": 144428,
+    "elapsedSec": 0.006,
+    "warm": true,
+    "utc": "2026-06-22T10:05:00Z"
   }
 }

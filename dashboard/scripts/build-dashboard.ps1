@@ -156,6 +156,21 @@ function Get-DashboardHtml {
         "<p class='note'>Same unmodified <code>lyra-pipeline.xml</code> driven by both orchestrators &mdash; graph portability, not a speed race (the Horde cook was cold-DDC; the TeamCity baseline above is warm).</p>"
     } else { "" }
 
+    # cook / Track 5 panel (content-addressed cooker warm-cache)
+    $pl = $Snapshot.pipeline
+    $plPanel = if ($pl) {
+        $plStale = if ($pl.stale) { " <span class='stale'>(stale)</span>" } else { "" }
+        $total   = [int]$pl.cooked + [int]$pl.cached
+        $warmTxt = if ($pl.warm) { "warm (reused $($pl.cached)/$total)" } else { "cold (cooked $($pl.cooked)/$total)" }
+        $mb      = Format-Num ([double]$pl.totalBytes / 1MB) 'N2'
+        $when    = Format-When $pl.utc
+        "<div class='panel'>" +
+        "<h2>Cook (Track 5)$plStale</h2>" +
+        "<div class='chips'>last cook: <b>$warmTxt</b> &middot; cooked <b>$($pl.cooked)</b> &middot; cached <b>$($pl.cached)</b> &middot; <b>$mb</b> MB &middot; $(Format-Num ([double]$pl.elapsedSec) 'N3')s &middot; $when</div>" +
+        "<p class='note'>Content-addressed cooker: a warm build reuses unchanged assets from the persisted CAS (cache hits), recooking only what changed. Sub-second at sample scale &mdash; the signal is the hit count, not wall-clock.</p>" +
+        "</div>"
+    } else { "" }
+
     $gen = ConvertTo-HtmlText $Snapshot.generatedUtc
 
 @"
@@ -199,6 +214,7 @@ code{font-family:monospace;color:#c9d1d9} .dim{color:#8b949e;font-size:12px} ul{
 <p class='note'>cook = cold-DDC baseline (one-time, full shader compile, ~24&nbsp;min); compile/package/BuildGraph are warm/incremental. BuildGraph runs compile&rarr;cook&rarr;package as one graph; stamp writes the CL provenance into the package + a CL-named sidecar.</p>
 $orchHtml
 </div>
+$plPanel
 
 <div class='cols'>
 <div class='panel'>
