@@ -56,6 +56,14 @@ class Cache:
         self._index[cook_key] = {"outputHash": output_hash, "ext": ext, "size": len(data)}
         return CacheResult(output_hash, len(data), False, ext)
 
+    def would_hit(self, cook_key):
+        """Return the cached output_hash for cook_key if a reusable blob exists, else None.
+        Read-only: never cooks, never writes -- the --dry-run primitive."""
+        entry = self._index.get(cook_key)
+        if entry and os.path.exists(self.blob_path(entry["outputHash"], entry["ext"])):
+            return entry["outputHash"]
+        return None
+
     def save(self):
         # sorted keys -> deterministic index file
         with open(self.index_path, "w", encoding="utf-8") as f:

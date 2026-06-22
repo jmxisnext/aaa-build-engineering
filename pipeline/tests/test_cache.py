@@ -69,6 +69,16 @@ class TestCache(unittest.TestCase):
             blobs = [f for f in os.listdir(d) if f.endswith(".tex")]
             self.assertEqual(len(blobs), 1)  # CAS dedupe
 
+    def test_would_hit_is_readonly_and_matches_cook_or_reuse(self):
+        with tempfile.TemporaryDirectory() as d:
+            c = cache.Cache(d)
+            self.assertIsNone(c.would_hit("k1"))               # empty index -> miss
+            fn = Counter(b"data")
+            r = c.cook_or_reuse("k1", "bin", fn)               # populate
+            self.assertEqual(c.would_hit("k1"), r.output_hash) # now a hit
+            self.assertEqual(fn.calls, 1)                      # would_hit did NOT cook
+            self.assertIsNone(c.would_hit("nope"))             # unknown key -> miss
+
 
 if __name__ == "__main__":
     unittest.main()

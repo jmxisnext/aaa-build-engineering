@@ -25,10 +25,30 @@ def main(argv=None):
     p.add_argument("--out", default=os.path.join(_HERE, "cooked"), help="cooked output / CAS dir")
     p.add_argument("--force", action="store_true", help="ignore the cache; clean re-cook")
     p.add_argument("--stats-json", help="also write run stats to this path")
+    p.add_argument("--dry-run", action="store_true",
+                   help="report what WOULD recook vs reuse; write nothing")
     args = p.parse_args(argv)
 
     if not os.path.isdir(args.src):
         p.error(f"source dir not found: {args.src} (run scripts/make-samples.py first)")
+
+    if args.dry_run:
+        rep = pipeline.plan(args.src, args.out)
+
+        def dline(label, recook, reuse):
+            return f"  {label:<11} recook {recook:>3}   reuse {reuse:>3}"
+
+        print(f"dry-run: {args.src} -> {args.out}  (nothing written)")
+        print(dline("textures", rep.textures_recook, rep.textures_cache))
+        print(dline("audio", rep.audio_recook, rep.audio_cache))
+        print(dline("characters", rep.characters_recook, rep.characters_cache))
+        if rep.would_recook:
+            print("  would recook:")
+            for r in rep.would_recook:
+                print(f"    {r}")
+        else:
+            print("  all up to date - nothing would recook.")
+        return 0
 
     st = pipeline.run(args.src, args.out, force=args.force)
 

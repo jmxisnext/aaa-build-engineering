@@ -8,7 +8,7 @@ separate), so a no-change re-run produces a byte-identical manifest.
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from . import assets, audio, cache, characters, hashing, textures
 
@@ -28,6 +28,17 @@ class Stats:
     total_bytes: int = 0
     elapsed_sec: float = 0.0
     toc_path: str = ""
+
+
+@dataclass
+class DryReport:
+    textures_recook: int = 0
+    textures_cache: int = 0
+    audio_recook: int = 0
+    audio_cache: int = 0
+    characters_recook: int = 0
+    characters_cache: int = 0
+    would_recook: list = field(default_factory=list)  # sorted rel paths that would re-cook
 
 
 def _read(path):
@@ -104,3 +115,53 @@ def run(src_dir, out_dir, force=False, max_dim=MAX_DIM):
     stats.toc_path = toc_path
     stats.elapsed_sec = round(time.perf_counter() - t0, 4)
     return stats
+
+
+def plan(src_dir, out_dir, max_dim=MAX_DIM):
+    """Dry-run: compute what a cook WOULD do (recook vs reuse) WITHOUT cooking or writing.
+    Reads the persisted cook index if the out dir exists; creates and writes nothing."""
+    chars = assets.load_characters(src_dir)
+    graph = assets.build_graph(chars)
+    rep = DryReport()
+
+    store = cache.Cache(out_dir, load_index=True) if os.path.isdir(out_dir) else None
+
+    def hit(key):
+        return store.would_hit(key) if store else None
+
+    asset_known_hash = {}   # rel -> output hash, for deps that WOULD be cache hits
+    asset_recook = set()    # rels that WOULD re-cook
+
+    tex_params = textures.params_bytes(max_dim)
+    for rel in graph.textures:
+        h = hit(hashing.cook_key(_read(os.path.join(src_dir, rel)), params=tex_params))
+        if h:
+            asset_known_hash[rel] = h; rep.textures_cache += 1
+        else:
+            asset_recook.add(rel); rep.textures_recook += 1
+
+    aud_params = audio.params_bytes()
+    for rel in graph.audio:
+        h = hit(hashing.cook_key(_read(os.path.join(src_dir, rel)), params=aud_params))
+        if h:
+            asset_known_hash[rel] = h; rep.audio_cache += 1
+        else:
+            asset_recook.add(rel); rep.audio_recook += 1
+
+    recook = set(asset_recook)
+    for ch in chars:
+        crel = f"characters/{ch.name}"
+        deps = list(ch.textures) + list(ch.audio)
+        if any(d in asset_recook for d in deps):
+            # a dependency would change -> the character must re-serialize
+            rep.characters_recook += 1; recook.add(crel); continue
+        refs = ([("texture", asset_known_hash[t]) for t in ch.textures]
+                + [("audio", asset_known_hash[a]) for a in ch.audio])
+        canon = (ch.name + "\n" + "\n".join(f"{k}:{h}" for k, h in refs)).encode("utf-8")
+        if hit(hashing.cook_key(canon, params=b"chr")):
+            rep.characters_cache += 1
+        else:
+            rep.characters_recook += 1; recook.add(crel)
+
+    rep.would_recook = sorted(recook)
+    return rep

@@ -108,6 +108,39 @@ class TestPipelineEndToEnd(unittest.TestCase):
             # leaf assets carry NO deps key (their schema is unchanged)
             self.assertNotIn("deps", toc["entries"]["textures/hero.png"])
 
+    def test_plan_after_cook_reports_all_cached_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as out:
+            _build_src(src)
+            pipeline.run(src, out)
+            toc = os.path.join(out, "manifest.toc.json")
+            before_mtime = os.path.getmtime(toc)
+            before_list = sorted(os.listdir(out))
+            rep = pipeline.plan(src, out)
+            self.assertEqual((rep.textures_recook, rep.audio_recook, rep.characters_recook), (0, 0, 0))
+            self.assertEqual((rep.textures_cache, rep.audio_cache, rep.characters_cache), (2, 1, 2))
+            self.assertEqual(rep.would_recook, [])
+            self.assertEqual(os.path.getmtime(toc), before_mtime, "plan must not rewrite the toc")
+            self.assertEqual(sorted(os.listdir(out)), before_list, "plan must not add files")
+
+    def test_plan_flags_touched_texture_and_its_dependent(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as out:
+            _build_src(src)
+            pipeline.run(src, out)
+            _png(os.path.join(src, "textures", "hero.png"), (10, 20, 30, 255))
+            rep = pipeline.plan(src, out)
+            self.assertEqual((rep.textures_recook, rep.textures_cache), (1, 1))
+            self.assertEqual((rep.characters_recook, rep.characters_cache), (1, 1))
+            self.assertIn("textures/hero.png", rep.would_recook)
+            self.assertIn("characters/hero", rep.would_recook)
+            self.assertNotIn("characters/npc", rep.would_recook)
+
+    def test_plan_on_empty_cache_reports_all_recook(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as out:
+            _build_src(src)
+            rep = pipeline.plan(src, out)
+            self.assertEqual((rep.textures_recook, rep.audio_recook, rep.characters_recook), (2, 1, 2))
+            self.assertEqual((rep.textures_cache, rep.audio_cache, rep.characters_cache), (0, 0, 0))
+
 
 if __name__ == "__main__":
     unittest.main()
