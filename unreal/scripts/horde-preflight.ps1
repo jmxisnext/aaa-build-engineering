@@ -89,7 +89,12 @@ if (Test-Path $driverCfg) {
 Add-Check 'JobDriver Executor=Local' (PF $execLocal) $driverCfg
 
 # --- shared DDC env var set + dir exists (the cook-warm optimizer) ---
+# Read Process scope first, then fall back to User/Machine so a var just set by
+# set-shared-ddc.ps1 (written to the User registry) is not a false FAIL in a shell
+# that started before the write.
 $ddc = [Environment]::GetEnvironmentVariable('UE-SharedDataCachePath')
+if (-not $ddc) { $ddc = [Environment]::GetEnvironmentVariable('UE-SharedDataCachePath','User') }
+if (-not $ddc) { $ddc = [Environment]::GetEnvironmentVariable('UE-SharedDataCachePath','Machine') }
 $ddcOk = $ddc -and (Test-Path $ddc)
 Add-Check 'Shared DDC (UE-SharedDataCachePath)' (PF $ddcOk) `
   $(if ($ddc) { $ddc } else { 'unset - run unreal/scripts/set-shared-ddc.ps1' })
