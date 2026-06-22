@@ -60,6 +60,22 @@ class TestCache(unittest.TestCase):
             self.assertTrue(r.hit)
             self.assertEqual(fn.calls, 0)  # never had to cook
 
+    def test_missing_blob_is_a_miss_and_recooks(self):
+        # The cache's warm-hit requires BOTH the index entry AND the backing blob on
+        # disk. If the blob is gone (truncated/lost artifact) the key must MISS and
+        # recook, never crash. This is the safety the warm-cache round-trip relies on.
+        with tempfile.TemporaryDirectory() as d:
+            c1 = cache.Cache(d)
+            r1 = c1.cook_or_reuse("key1", "tex", Counter(b"data"))
+            c1.save()
+            os.remove(c1.blob_path(r1.output_hash, "tex"))   # blob vanishes; index remains
+            c2 = cache.Cache(d)
+            self.assertIsNone(c2.would_hit("key1"))           # read-only path: miss
+            fn = Counter(b"data")
+            r2 = c2.cook_or_reuse("key1", "tex", fn)
+            self.assertFalse(r2.hit)                          # recooked, not crashed
+            self.assertEqual(fn.calls, 1)
+
     def test_identical_output_dedupes_to_one_blob(self):
         with tempfile.TemporaryDirectory() as d:
             c = cache.Cache(d)
