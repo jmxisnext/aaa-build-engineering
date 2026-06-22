@@ -50,7 +50,7 @@ The new stage is **additive and independent of the hoops C++ build** (the real c
 | File | Change | Purpose / interface |
 |---|---|---|
 | `ci/scripts/bootstrap-builds.ps1` | **+ config** `AAASandbox_CookAssets` | Two inline steps (make-samples; `cook.py --pack … --stats-json …`); self artifact-dep (lastSuccessful, `cooked.zip!** => pipeline/cooked`, **non-fatal when source absent**); ArtifactRules publish `pipeline/cooked => cooked.zip` + `Cooked-assets.pak` + `manifest.toc.json` + the stats json. |
-| `pipeline/cook.py` | **none (reuse)** | Already has `--pack`, `--stats-json`, `--dry-run`. Warm/cold signal is its existing `cooked N / cached M` output. |
+| `pipeline/cook.py` | **1-line hardening** | Already has `--pack`, `--stats-json`, `--dry-run`; warm/cold signal is its existing `cooked N / cached M` output. **Fix:** `--stats-json` to a not-yet-existing dir currently raises `FileNotFoundError` (verified) — `os.makedirs(dirname, exist_ok=True)` before writing. (`run()` already creates `out_dir`, so the empty-cache first build does not crash.) |
 | `.github/workflows/tests.yml` | **+ job** `pipeline-cooker` | `setup-python` + `pip install pillow` + `python -m unittest discover -s pipeline/tests` + a make-samples→cook smoke. Fills PR #1's gap. |
 | `run-tests.sh` | **+ cooker suite** | Local aggregate-runner parity with the new GH Actions job. |
 | `dashboard/scripts/collect-metrics.ps1` | **+ `Get-PipelineFeed` / `ConvertFrom-PipelineMetrics`** | Pure transform reads `pipeline/.metrics/*.json` → new `pipeline` snapshot section via `Merge-Feed` stale-fallback. Mirrors the `unreal` feed. |
@@ -92,8 +92,9 @@ The committed `snapshot.json` carries the latest cook stats; stale-fallback via 
 
 | Case | Handling |
 |---|---|
-| **First-ever build (empty cache)** | No prior successful build ⇒ no `cooked.zip`. (a) Configure the self artifact-dep so a **missing source build is non-fatal** (not the TeamCity default — would otherwise fail "no suitable build found"). (b) `cook.py` treats an absent/empty `pipeline/cooked/` as a cold start (creates it). **#1 thing to validate in the gated live run.** |
-| **Corrupt / partial CAS** | A `.toc` index entry whose backing blob is missing from the unzipped CAS must be treated as a **cache miss → recook**, never a crash. If `cooker/cache.py` does not already degrade this way, add the hardening + a test in the plan. |
+| **Cache index must survive the artifact round-trip** ⚠️ | **The warm-cache hinges entirely on `cooked/.cookindex.json` (a dotfile) round-tripping through the artifact.** Verified offline: with all blobs present but the index removed, the cook goes **fully cold** (`cooked 8 / cached 0`) — and the build still passes, so the failure is *silent*. Mitigations (all in the plan): (a) publish with the **directory-form** rule `pipeline/cooked => cooked.zip` (archives the dir incl. dotfiles) rather than a `pipeline/cooked/** => …` glob that may skip dotfiles; (b) a **CI guard** asserting build #2 reports `cached > 0`, so a cold-cache regression fails loudly; (c) **stronger option — de-dot the index** (`.cookindex.json` → `cookindex.json` in `cooker/cache.py` + tests) to remove the dotfile-glob risk class entirely. |
+| **First-ever build (empty cache)** | No prior successful build ⇒ no `cooked.zip`. (a) Configure the self artifact-dep so a **missing source build is non-fatal** (not the TeamCity default — would otherwise fail "no suitable build found"). (b) `cook.py` `run()` already `os.makedirs(out_dir)`, so an absent/empty `pipeline/cooked/` is a clean cold start (verified). To validate in the gated live run. |
+| **Corrupt / partial CAS** | **Already handled (verified):** `cache.cook_or_reuse` only counts a HIT when the index entry's backing blob exists on disk, so a missing/truncated blob is treated as a **cache miss → recook**, never a crash. Needs only a **regression test** to lock the behavior — no hardening. |
 | **Determinism drift** | If make-samples or the pak/blob writes go nondeterministic (timestamps, dict order), warm-cache silently never hits (`cached 0` forever). Guard: a **regression test** asserting two consecutive cooks of identical input ⇒ `cached == total`. |
 | **Unbounded CAS growth** | Content-addressed store only grows; changed assets leave orphaned blobs in `cooked.zip`. Negligible at this scale. v1 leans on TeamCity artifact-cleanup policy; a **CAS GC (prune blobs absent from the current `.toc`) is an explicit non-goal / follow-up.** |
 | **Concurrent Cook Assets builds** | Both pull the same lastSuccessful CAS, each cooks in its own checkout, last-writer-wins on the published artifact — **no corruption** (the reason Approach A beats a shared volume). |
@@ -116,6 +117,13 @@ The first-build artifact-dep behavior is the one genuine TeamCity-semantics risk
 - `make-samples → cook --pack --stats-json` produces the expected `.pak`/`.toc`/stats locally.
 - **Local warm-cache proof**: cook twice (cold→warm) ⇒ `cached == total`; perturb one texture ⇒ partial recook — proves the cooker side with **no TeamCity needed**.
 - GH Actions YAML valid + cooker job defined; dashboard renders the panel from a fixture snapshot.
+
+**Pre-validated offline (2026-06-22, before plan — Python 3.13 / Pillow 12.1):**
+- Cold cook ⇒ `cooked 8 / cached 0`; warm re-cook (unchanged) ⇒ `cooked 0 / cached 8`. **Warm-cache premise confirmed.**
+- Perturb one texture (`hero_normal`) ⇒ `cooked 2 / cached 6`, recooking exactly the dependent character — dep-edge propagation confirmed.
+- Two `--pack` runs of identical input ⇒ byte-identical `.pak` (sha256 match) — determinism confirmed.
+- Removing `.cookindex.json` (blobs intact) ⇒ fully cold — motivates the index-survival invariant in §6.
+- `--stats-json` to a non-existent dir ⇒ `FileNotFoundError` — motivates the `cook.py` makedirs fix in §4.
 
 ## 8. Gated (out of offline scope — deferred per campaign §5 "just the run")
 
