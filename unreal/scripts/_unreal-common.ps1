@@ -186,3 +186,21 @@ function New-RunMetric {
   $m['utc'] = $Utc
   return $m
 }
+
+# Aggregate preflight check results into a run-readiness verdict. Pure (no I/O) so it is
+# unit-tested directly; horde-preflight.ps1 produces the check objects and renders/exits on this.
+# Each check is an object with a Status of PASS/WARN/FAIL. WARN is advisory and never fails the
+# gate; any FAIL makes the run NOT ready (ExitCode 1) so the expensive run can gate on exit code.
+function Get-PreflightVerdict {
+  [CmdletBinding()] param([object[]]$Checks)
+  $all  = @($Checks)
+  $fail = @($all | Where-Object { $_.Status -eq 'FAIL' }).Count
+  $warn = @($all | Where-Object { $_.Status -eq 'WARN' }).Count
+  [pscustomobject]@{
+    Total    = $all.Count
+    Failed   = $fail
+    Warned   = $warn
+    Ready    = ($fail -eq 0)
+    ExitCode = $(if ($fail -eq 0) { 0 } else { 1 })
+  }
+}

@@ -16,10 +16,12 @@ remote agents for UBA to win on — see `../lessons-learned.md` #3).
    (~24.6 min, cold-ish: Vulkan SM6 perms not in DDC)** · Package 120s = **1711s end-to-end**.
    Paks (`pakchunk0/1/2`, 1.72 GB) archived to `D:\LyraPackaged`. Same unmodified
    `lyra-pipeline.xml` TeamCity runs.
-4. CL-stamp parity with the TeamCity package. ⬜ — the BuildGraph `Package Lyra` node writes the
-   **paks**, but **not** the CL stamp / `build-info.json` (that's the separate `stamp-lyra-package.ps1`
-   step). After a Horde run, `D:\LyraPackaged\Windows\build-info.json` is still the *prior* TeamCity
-   stamp. Next: run the stamp step against the Horde-produced package (or add a stamp node to the graph).
+4. CL-stamp parity with the TeamCity package. ✅ **AUTHORED 2026-06-21 (in-graph)** — `lyra-pipeline.xml`
+   now has a `Stamp Lyra` node (`Requires="Package Lyra"`; `Aggregate Lyra Pipeline` requires it) running
+   `stamp-lyra-package.ps1 -Source $(Source)`, so a live Horde run writes `build-info.json` with the run's
+   own CL **in-graph** — no separate manual stamp step. (Was ⬜ before commit c0688df added the node.)
+   **Verify on the next live Horde run** that `D:\LyraPackaged\Windows\build-info.json` carries the Horde
+   run's CL, not a prior TeamCity stamp.
 5. Dashboard "Horde vs TeamCity" row (Horde job emits `.metrics` as a second source). ✅ **DONE
    2026-06-13** — Horde job emits `unreal/.metrics/buildgraph-Lyra-horde-*.json` (`source: horde`);
    collector groups buildgraph by source into `unreal.orchestrators`; dashboard renders the
