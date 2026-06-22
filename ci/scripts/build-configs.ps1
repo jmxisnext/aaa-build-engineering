@@ -87,6 +87,10 @@ fi
             ArtifactDeps  = @()
             # Self artifact-dependency: restore THIS config's last successful CAS.
             WarmCacheArtifact = @{ PathRules = "cooked.zip!** => pipeline/cooked" }
+            # Clean checkout: wipe the agent checkout dir before each build so pipeline/cooked/
+            # comes ONLY from the self artifact-dependency (not stale same-agent residue). TeamCity
+            # resolves artifact deps AFTER checkout, so the restored CAS survives. (final-review IMPORTANT)
+            CleanCheckout = $true
             # Directory-form publish so the .cookindex.json DOTFILE is archived (spec §6).
             ArtifactRules = "+:pipeline/cooked => cooked.zip`n+:Cooked-assets.pak`n+:pipeline/.metrics/cook-*.json => cook-stats"
         }

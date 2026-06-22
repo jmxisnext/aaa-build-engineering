@@ -220,6 +220,15 @@ function Set-ArtifactRules {
         -Body $Rules -ContentType "text/plain" -Accept "text/plain" | Out-Null
 }
 
+# Clean checkout: wipe the agent checkout dir before each build so pipeline/cooked/
+# comes ONLY from the self artifact-dependency (not stale same-agent residue). TeamCity
+# resolves artifact deps AFTER checkout, so the restored CAS survives. (final-review IMPORTANT)
+function Set-CleanBuild {
+    param([string]$BuildTypeId)
+    Invoke-TC PUT "/app/rest/buildTypes/id:$BuildTypeId/settings/cleanBuild" `
+        -Body "true" -ContentType "text/plain" -Accept "text/plain" | Out-Null
+}
+
 # ---------- declarative config ----------
 #
 # Order matters: configs are created top-to-bottom and each may
@@ -301,6 +310,9 @@ foreach ($cfg in $configs) {
     }
     if ($cfg.WarmCacheArtifact) {
         Add-SelfArtifactDep -BuildTypeId $id -PathRules $cfg.WarmCacheArtifact.PathRules
+    }
+    if ($cfg.CleanCheckout) {
+        Set-CleanBuild -BuildTypeId $id
     }
     if ($cfg.ArtifactRules) {
         Set-ArtifactRules -BuildTypeId $id -Rules $cfg.ArtifactRules

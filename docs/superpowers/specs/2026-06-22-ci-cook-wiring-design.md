@@ -130,6 +130,7 @@ The first-build artifact-dep behavior is the one genuine TeamCity-semantics risk
 - Creating the `AAASandbox_CookAssets` config via `bootstrap-builds.ps1` REST against the running server.
 - The self artifact-dep round-trip across two real builds (incl. the first-build non-fatal behavior).
 - The measured warm-vs-cold delta and **cross-agent** cache reuse (cook on agent-02 reusing agent-01's published CAS).
+- **Warm-cache guard validation must rely on clean checkout (now configured via `CleanCheckout = $true` / `Set-CleanBuild`) or be validated cross-agent.** Because `pipeline/cooked/` is gitignored, an incremental checkout leaves the prior build's CAS on the agent between same-agent builds, so a same-agent green guard could mask a broken artifact round-trip. Clean checkout is now wired into the `Cook Assets` config so that `pipeline/cooked/` is absent at the start of every build and can only be populated by the self artifact-dependency — making the `cached > 0` guard a true round-trip gate.
 
 ## 9. Success criterion / non-goals
 

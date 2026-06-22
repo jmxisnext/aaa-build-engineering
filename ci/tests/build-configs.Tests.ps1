@@ -25,5 +25,6 @@ Assert-Match 'cached'            $ca.Steps[0].Script 'step carries the warm-cach
 Assert-Match 'pipeline/cooked => cooked\.zip' $ca.ArtifactRules 'publishes the CAS dir-form (dotfiles included)'
 Assert-Match 'Cooked-assets\.pak'             $ca.ArtifactRules 'publishes the real .pak'
 Assert-Equal 'cooked.zip!** => pipeline/cooked' $ca.WarmCacheArtifact.PathRules 'self artifact-dep restores the CAS'
+Assert-True $ca.CleanCheckout 'Cook Assets uses clean checkout so the CAS is artifact-driven, not checkout-residue'
 
 Assert-Summary
