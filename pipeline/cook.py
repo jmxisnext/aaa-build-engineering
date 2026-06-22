@@ -27,6 +27,7 @@ def main(argv=None):
     p.add_argument("--stats-json", help="also write run stats to this path")
     p.add_argument("--dry-run", action="store_true",
                    help="report what WOULD recook vs reuse; write nothing")
+    p.add_argument("--pack", help="also pack cooked blobs + toc into a single .pak at this path")
     args = p.parse_args(argv)
 
     if not os.path.isdir(args.src):
@@ -66,6 +67,11 @@ def main(argv=None):
         with open(args.stats_json, "w", encoding="utf-8") as f:
             json.dump(dataclasses.asdict(st), f, indent=2, sort_keys=True)
         print(f"  stats: {args.stats_json}")
+
+    if args.pack:
+        from cooker import pak  # local import; only needed for --pack
+        n = pak.pack(args.out, st.toc_path, args.pack)
+        print(f"  pak: {args.pack} ({n} entries)")
     return 0
 
 
