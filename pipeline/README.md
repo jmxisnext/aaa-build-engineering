@@ -6,8 +6,11 @@ mini DDC / CAS**: a Python cooker that turns synthetic source assets into cooked
 stores them content-addressed, and **skips re-cooking anything that didn't change** — the
 same idea as Unreal's Zen/DDC, in ~400 lines of stdlib + Pillow.
 
-> This is **slice 1 — the cooker core**. The C# WPF artist tool (roadmap step 3) and wiring
-> into the Track-2 CI `Cook Data` job are deliberately later steps (see *Out of scope*).
+> This is **slice 1 — the cooker core**, now **wired into CI** as an additive `Cook Assets`
+> TeamCity stage (warm-cache via self artifact-dep) + a dashboard panel — live TeamCity
+> validation is gated (see `ci/`). The C# WPF artist tool (roadmap step 3) is the remaining
+> later step; *replacing* the Track-2 stub `Cook Data` job stays out of scope by design — the
+> new stage is additive (see *Out of scope*).
 
 ## The demo (zero heavy services — pure offline)
 

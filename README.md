@@ -10,7 +10,7 @@ This is not a one-off experiment. It's an ongoing skill ladder.
 - `SKILLS_ROADMAP.md` — 5 practice tracks + a capstone. Each track produces one demoable artifact.
 - `HANDOFF.md` — current session resume.
 - `SEEDS.md` — parked ideas.
-- Subdirs added per track as work progresses: `perforce/`, `ci/`, `accel/`, `unreal/`, `pipeline/` (`pipeline/` — Track 5; slice 1, the content cooker / mini DDC-CAS, landed; C# WPF tool + CI wiring still to come).
+- Subdirs added per track as work progresses: `perforce/`, `ci/`, `accel/`, `unreal/`, `pipeline/` (`pipeline/` — Track 5; slice 1 (content cooker / mini DDC-CAS) + CI wiring (additive `Cook Assets` stage + dashboard panel; live TeamCity validation gated) landed; C# WPF tool still to come).
 - `dashboard/` — observability dashboard aggregating all four built tracks (CI, accel, perforce, Unreal/Lyra) into one self-contained `dashboard.html` that opens offline. Built from a committed real snapshot (`collect-metrics` → `snapshot.json` → `build-dashboard`).
 
 ## How to use this repo across sessions
