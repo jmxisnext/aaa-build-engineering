@@ -49,7 +49,7 @@ Assert-Match 'teamcity'                         $html 'renders the TeamCity orch
 Assert-Match '1711'                             $html 'renders the Horde end-to-end duration'
 # ---- Track-5 cook panel ----
 Assert-Match 'Cook \(Track 5\)' $html 'has the Track-5 cook panel'
-Assert-Match 'cached'           $html 'cook panel shows cache hits'
+Assert-Match 'reused 8/8'       $html 'cook panel renders the warm reuse count (cached/total)'
 # self-contained: no external script/style/CDN (xmlns + localhost build links are OK)
 Assert-NotMatch '<script'                       $html 'no <script> tags'
 Assert-NotMatch '<link\s'                       $html 'no <link> stylesheet refs'
