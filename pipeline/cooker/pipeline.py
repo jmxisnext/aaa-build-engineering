@@ -46,11 +46,14 @@ def run(src_dir, out_dir, force=False, max_dim=MAX_DIM):
     entries = {}
     asset_hash = {}  # source rel path -> cooked output hash (for character refs)
 
-    def _record(rel, kind, key, result):
-        entries[rel] = {
+    def _record(rel, kind, key, result, deps=None):
+        entry = {
             "type": kind, "cookKey": key, "outputHash": result.output_hash,
             "size": result.size, "ext": result.ext,
         }
+        if deps is not None:
+            entry["deps"] = deps   # character -> source asset rel paths (sorted); leaves carry none
+        entries[rel] = entry
         stats.total_bytes += result.size
 
     tex_params = textures.params_bytes(max_dim)
@@ -81,7 +84,8 @@ def run(src_dir, out_dir, force=False, max_dim=MAX_DIM):
         key = hashing.cook_key(canon, params=b"chr")
         r = store.cook_or_reuse(
             key, "chr", lambda ch=ch, refs=refs: characters.cook_character(ch.name, refs))
-        _record(f"characters/{ch.name}", "character", key, r)
+        deps = sorted(list(ch.textures) + list(ch.audio))
+        _record(f"characters/{ch.name}", "character", key, r, deps=deps)
         setattr(stats, "characters_cached" if r.hit else "characters_cooked",
                 getattr(stats, "characters_cached" if r.hit else "characters_cooked") + 1)
 

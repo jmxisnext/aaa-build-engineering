@@ -95,6 +95,19 @@ class TestPipelineEndToEnd(unittest.TestCase):
             st = pipeline.run(src, out, force=True)
             self.assertEqual((st.textures_cooked, st.audio_cooked, st.characters_cooked), (2, 1, 2))
 
+    def test_character_entries_carry_sorted_dependency_edges(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as out:
+            _build_src(src)
+            pipeline.run(src, out)
+            with open(os.path.join(out, "manifest.toc.json")) as f:
+                toc = json.load(f)
+            self.assertEqual(toc["entries"]["characters/hero"]["deps"],
+                             ["audio/hero.wav", "textures/hero.png"])
+            self.assertEqual(toc["entries"]["characters/npc"]["deps"],
+                             ["textures/npc.png"])
+            # leaf assets carry NO deps key (their schema is unchanged)
+            self.assertNotIn("deps", toc["entries"]["textures/hero.png"])
+
 
 if __name__ == "__main__":
     unittest.main()
