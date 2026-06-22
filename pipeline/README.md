@@ -88,4 +88,4 @@ Cook stats in `pipeline/.metrics/` feed the dashboard "Cook (Track 5)" panel via
   see sizes / stale entries. The cooker exposes `pipeline.run` + the `.toc` for it to consume.
 - **CI wiring** — replacing Track 2's stub `Cook Data` job with this cooker.
 - **Cache GC** — orphaned blobs/keys (left when an input changes) are harmless but not collected.
-- **Dashboard feed** — the `--stats-json` output is shaped to feed the dashboard later; not wired.
+- **Dashboard feed** — wired: cook `--stats-json` emits to `pipeline/.metrics/`, ingested by `dashboard/scripts/collect-metrics.ps1` into the "Cook (Track 5)" panel (see "CI integration" above).
