@@ -136,7 +136,7 @@ artifact, then layer the differentiator onto the same graph.
 - Hardware: GPU fine (3060 12 GB runs the Lyra editor); RAM 31 GB is the ceiling — **serialize**
   (don't run UE + TeamCity + Docker heavy at once). Source on J:, UE+Lyra on G:, DDC/scratch on D:.
 
-**Step 2 (full pipeline + dashboard ✅ — CL-stamp parity the one remaining gap) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
+**Step 2 (full pipeline + dashboard ✅ — CL-stamp parity authored in-graph, pending one live-run verify) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
 - **Demoable artifact (the win condition):** a local **Horde Server + one agent** runs the
   **unmodified** `unreal/buildgraph/lyra-pipeline.xml` and produces the **same CL-version-stamped
   package + `.metrics`** the TeamCity path already produces — and the **dashboard shows a Horde run
@@ -150,8 +150,10 @@ artifact, then layer the differentiator onto the same graph.
   compile→cook→package end-to-end under Horde (job `6a2da13d…`, ~28.5 min, cook ~24.6 min); the Horde
   job emits a `source=horde` `.metrics` and the dashboard renders the "Orchestrator parity — Horde vs
   TeamCity" row. (Gotcha: p4d must be up — the server validates the Perforce cluster at lease-assignment.)
-- **Remaining:** CL-stamp parity — the BuildGraph `Package` node writes paks but not `build-info.json`,
-  so the Horde package still carries the prior TeamCity stamp (run `stamp-lyra-package.ps1` against it).
+- **Remaining (authored, verify-only):** CL-stamp parity is now **in-graph** — `lyra-pipeline.xml` has a
+  `Stamp Lyra` node (`Requires="Package Lyra"`, pulled by the aggregate) running `stamp-lyra-package.ps1
+  -Source $(Source)` (added `c0688df`; asserted by `buildgraph-xml.Tests.ps1`). A live Horde run now stamps
+  `build-info.json` with its own CL in-graph — **verify on the next live run**; no separate manual stamp step.
 - **Hardware reality (don't over-promise):** 8 cores = honest **overhead-overlap, not farm-scale**.
   UBA is ~29% *slower* single-box (lesson #3 — its win is remote agents, which one box lacks), and
   even unlimited RAM won't change that (the cost is ~22 s server/CAS/detour setup, not memory). The
