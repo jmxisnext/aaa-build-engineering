@@ -26,6 +26,24 @@ jobs:
       - name: Run trigger/tool unit tests
         run: python -m unittest discover -s perforce/tests -t perforce/tests -v
 
+  pipeline-cooker:
+    name: pipeline cooker (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Pillow
+        run: pip install pillow
+      - name: Cooker unit tests
+        run: python -m unittest discover -s pipeline/tests -t pipeline/tests -v
+      - name: Cook smoke (make-samples -> cook --pack)
+        run: |
+          python pipeline/scripts/make-samples.py
+          python pipeline/cook.py --pack /tmp/Cooked-assets.pak --stats-json /tmp/m/cook.json
+          test -f /tmp/Cooked-assets.pak
+
   hoops-tests:
     name: hoops_tests (c++ shotmeter)
     runs-on: ubuntu-latest

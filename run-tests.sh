@@ -38,6 +38,18 @@ else
     echo "  python3 not found — skipping"; record SKIP "perforce (python)"
 fi
 
+# ---- 1b. Pipeline cooker (Python) ------------------------------------------
+hr; echo "[pipeline] Python cooker tests"
+if command -v python3 >/dev/null 2>&1; then
+    if python3 -m unittest discover -s pipeline/tests -t pipeline/tests; then
+        record PASS "pipeline cooker (python)"
+    else
+        record FAIL "pipeline cooker (python)"
+    fi
+else
+    echo "  python3 not found — skipping"; record SKIP "pipeline cooker (python)"
+fi
+
 # ---- 2. hoops_tests / ShotMeter (C++) --------------------------------------
 hr; echo "[ci] hoops_tests (C++ ShotMeter)"
 HOOPS_DIR="ci/samples/hoops-brawl-seed/stream"
