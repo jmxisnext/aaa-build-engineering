@@ -84,4 +84,20 @@ Assert-True  (-not $pfCold.warm) 'cold run (cached 0) is not warm'
 
 Assert-True  ($null -eq (ConvertFrom-PipelineMetrics -Metrics @())) 'no metrics -> null section'
 
+# Real producer->consumer contract: cook.py's actual --stats-json output must flow through
+# Get-PipelineFeed without a fabricated utc (regression for the final-review CRITICAL).
+$py = (Get-Command python3 -ErrorAction SilentlyContinue); if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
+if ($py) {
+    $repo = Resolve-Path (Join-Path $here "..\..")
+    $tmp  = Join-Path ([System.IO.Path]::GetTempPath()) ("cookctr_" + [guid]::NewGuid().ToString('N'))
+    try {
+        & $py.Source (Join-Path $repo "pipeline\scripts\make-samples.py") --out (Join-Path $tmp "assets") | Out-Null
+        & $py.Source (Join-Path $repo "pipeline\cook.py") --src (Join-Path $tmp "assets") --out (Join-Path $tmp "cooked") --stats-json (Join-Path $tmp ".metrics\cook-1.json") | Out-Null
+        $feed = Get-PipelineFeed -Dir (Join-Path $tmp ".metrics")
+        Assert-True ($null -ne $feed)        'real cook.py stats flow through Get-PipelineFeed without throwing'
+        Assert-True ($feed.cooked -ge 0 -and $feed.cached -ge 0) 'real-output feed has cooked/cached counts'
+        Assert-True ([bool]$feed.utc)        'real cook.py output now carries a utc timestamp'
+    } finally { if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp } }
+} else { Write-Host "  (python not found - skipping real cook.py contract test)" }
+
 Assert-Summary

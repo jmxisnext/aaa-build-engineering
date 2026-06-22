@@ -9,6 +9,7 @@ Thin glue over cooker.pipeline.run (which carries the tested logic). Exit 0 on s
 """
 import argparse
 import dataclasses
+import datetime
 import json
 import os
 import sys
@@ -67,8 +68,10 @@ def main(argv=None):
         stats_dir = os.path.dirname(args.stats_json)
         if stats_dir:
             os.makedirs(stats_dir, exist_ok=True)
+        payload = dataclasses.asdict(st)
+        payload["utc"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with open(args.stats_json, "w", encoding="utf-8") as f:
-            json.dump(dataclasses.asdict(st), f, indent=2, sort_keys=True)
+            json.dump(payload, f, indent=2, sort_keys=True)
         print(f"  stats: {args.stats_json}")
 
     if args.pack:

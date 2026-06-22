@@ -131,7 +131,9 @@ function ConvertFrom-PipelineMetrics {
     # Latest record by utc. 'warm' = a run that recooked nothing but reused something.
     param([object[]]$Metrics)
     if (-not $Metrics) { return $null }
-    $latest = $Metrics | Sort-Object { [datetime]$_.utc } | Select-Object -Last 1
+    $latest = $Metrics | Sort-Object {
+        if ($_.utc) { try { [datetime]$_.utc } catch { [datetime]::MinValue } } else { [datetime]::MinValue }
+    } | Select-Object -Last 1
     if (-not $latest) { return $null }
     $cooked = [int]$latest.textures_cooked + [int]$latest.audio_cooked + [int]$latest.characters_cooked
     $cached = [int]$latest.textures_cached + [int]$latest.audio_cached + [int]$latest.characters_cached
