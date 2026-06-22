@@ -54,6 +54,20 @@ pwsh -File unreal/scripts/check-prereqs.ps1
 - 31 GB RAM: don't run UE + Horde + TeamCity + Docker concurrently. The 3060 12 GB runs the
   Lyra editor comfortably; CitySample is RAM-tight.
 
+## Shared DDC (cook-warm optimizer)
+
+Both the TeamCity-driven and Horde-driven Lyra cooks run on **this one box**, so they can share a
+single DDC on the `D:\` NVMe scratch drive. A warm shared cache turns a cold cook (last Horde cook:
+**~24.6 min**, Vulkan SM6 perms uncached) into ~1 min — the biggest cook-throughput lever — and it
+also consolidates the project's Shared-DDC writes off `G:\` onto `D:\` (closing the lesson #4 follow-up).
+
+- **Configure once:** `pwsh -File unreal/scripts/set-shared-ddc.ps1` sets `UE-SharedDataCachePath`
+  to `D:\DDC-Shared` (overrides the engine's Shared DDC node path). Open a new shell / restart the
+  Horde agent so it inherits the var.
+- **Warm once, reuse:** run a TeamCity cook (which you do anyway) to fill the cache; the next Horde
+  cook reads the same folder and skips the shader compile. `horde-preflight.ps1` checks the var is
+  set before a heavy run.
+
 ## Status
 
 - **2026-06-04:** Prereqs **3/3 green** — VS2022 17.14 · UE 5.6.1 (`G:\UnrealEngine\UE_5.6`) ·
