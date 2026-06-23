@@ -180,3 +180,65 @@ overrides only the Local node. Total consolidation needs the project/shared node
   warm DDC is the lever.
 - `Win64` (build) cooks to `Saved\Cooked\Windows` (cooked) - mind the rename in clean/stage steps.
 - `UE-LocalDataCachePath` moves only the Local DDC node; confirm on disk, the cache is multi-node.
+
+## 5. An empty *shared* DDC stays sparse when the *local* DDC is already warm
+
+**What happened:** configured a shared DDC (`UE-SharedDataCachePath=D:\DDC-Shared` — the Shared
+node lesson #4 Gotcha B flagged as still un-redirected) to set up a cold→warm cook demo. With the
+shared folder **empty (0 files)**, expected the next Horde cook to be a cold ~24-min fill. Instead
+the cook ran in **~108s** and `D:\DDC-Shared` gained only **36 MB / 603 files** — a fast cook AND a
+near-empty shared cache, the opposite of the expected cold-fill.
+
+**Root cause:** UE's DDC is a hierarchy (Boot → Local → Shared → …) read in order. This box's
+**Local** DDC was still warm from the 2026-06-13 cold cook (lesson #4), so every shader resolved as
+a **Local hit** — and a Local hit is **not back-propagated** to the Shared node. The Shared node
+only captured the small delta genuinely (re)computed this run. So *empty Shared + warm Local ⇒ fast
+cook + sparse Shared.* The "cold→warm via the shared folder" demo is **unobservable on a single box
+whose Local DDC is already warm** — a warm second cook would just show ~the same time, no delta.
+
+**Why a build engineer cares:**
+- A shared/network DDC's value is **cross-machine**: it lets a *second* machine with a cold Local
+  DDC skip shader compile by reading another's results. On one box with one warm Local DDC the
+  Shared node is redundant and stays sparse — there's no payoff to demonstrate there.
+- To *seed* a Shared DDC you need a producer that **misses Local** (a genuinely cold Local DDC) so
+  the compute happens and writes through to Shared. You fill Shared with cold-Local cooks, not warm
+  ones.
+- **"Empty shared cache" ≠ "cold cook."** Verify the regime by *where the hits resolve* (Local vs
+  Shared), not by the shared folder's size.
+
+**Takeaway:**
+- Local-DDC hits don't back-fill the Shared node → warm Local + empty Shared still cooks fast and
+  leaves Shared sparse. The shared-DDC speedup is a **cross-machine** story.
+- Demo it across two machines (or after wiping Local), not two cooks on one warm box. The documented
+  cold number stays **24.6 min** (2026-06-13, cold Local).
+
+## 6. The *running* Horde config isn't the repo config — `-set:Source=horde` drift
+
+**What happened:** the in-graph `Stamp Lyra` node (authored 2026-06-21, `c0688df`) is meant to stamp
+`source=horde` on Horde runs via the stream template's `-set:Source=horde` argument. The **first
+live Horde run after authoring** stamped `build-info.json` with **`source: teamcity` /
+`orchestrator: TeamCity`** anyway — under a Horde run.
+
+**Root cause:** Horde reads its stream/template config from **`C:\ProgramData\Epic\Horde\Server\`**,
+not from the repo. The repo's `unreal/horde/config/game-main.stream.json` had `-set:Source=horde`,
+but that copy was **never redeployed** after 2026-06-21 — the running server executed a **stale**
+template (no `-set:Source=horde`), so BuildGraph's `Source` option fell back to its
+`DefaultValue="teamcity"`. The offline XML test (`buildgraph-xml.Tests.ps1`) asserts the Stamp node
+*exists*; it cannot see that the live server runs a different template than the repo. **Fix:** copy
+repo config → `C:\ProgramData\Epic\Horde\Server\`, server hot-reloads the dir, re-run → `source:
+horde` (verified 2026-06-22, job `6a3990fc…`, a ~3-min warm re-run).
+
+**Why a build engineer cares:**
+- **Config that lives outside the repo drifts.** A build server reads deployed config from its own
+  dir; editing the repo copy changes nothing until you redeploy. The gap is invisible to repo-only
+  tests and to "the node is present" assertions.
+- This is why a **deploy step** (or a repo↔deployed drift check) belongs in the pipeline — the same
+  de-risk logic as the preflight's machine-state checks, applied to config.
+- A **live run** is the only thing that catches it: "authored + offline-tested" ≠ "works in the
+  running system." This is exactly the gated-validation a heavy run exists to perform.
+
+**Takeaway:**
+- Horde stream/template edits in the repo don't take effect until copied to
+  `C:\ProgramData\Epic\Horde\Server\` (the server hot-reloads that dir).
+- Verify orchestrator-specific behavior on a **live run**; offline graph tests can't see
+  deployed-vs-repo drift. (Seed: add a repo↔deployed config-drift check to `horde-preflight.ps1`.)

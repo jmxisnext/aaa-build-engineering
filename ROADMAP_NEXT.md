@@ -136,7 +136,7 @@ artifact, then layer the differentiator onto the same graph.
 - Hardware: GPU fine (3060 12 GB runs the Lyra editor); RAM 31 GB is the ceiling — **serialize**
   (don't run UE + TeamCity + Docker heavy at once). Source on J:, UE+Lyra on G:, DDC/scratch on D:.
 
-**Step 2 (full pipeline + dashboard ✅ — CL-stamp parity authored in-graph, pending one live-run verify) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
+**Step 2 (full pipeline + dashboard ✅ — CL-stamp parity LIVE-VERIFIED 2026-06-22) — Horde-on-one-box + UBA**, running Step 1's BuildGraph. [opp #2]
 - **Demoable artifact (the win condition):** a local **Horde Server + one agent** runs the
   **unmodified** `unreal/buildgraph/lyra-pipeline.xml` and produces the **same CL-version-stamped
   package + `.metrics`** the TeamCity path already produces — and the **dashboard shows a Horde run
@@ -150,10 +150,12 @@ artifact, then layer the differentiator onto the same graph.
   compile→cook→package end-to-end under Horde (job `6a2da13d…`, ~28.5 min, cook ~24.6 min); the Horde
   job emits a `source=horde` `.metrics` and the dashboard renders the "Orchestrator parity — Horde vs
   TeamCity" row. (Gotcha: p4d must be up — the server validates the Perforce cluster at lease-assignment.)
-- **Remaining (authored, verify-only):** CL-stamp parity is now **in-graph** — `lyra-pipeline.xml` has a
-  `Stamp Lyra` node (`Requires="Package Lyra"`, pulled by the aggregate) running `stamp-lyra-package.ps1
-  -Source $(Source)` (added `c0688df`; asserted by `buildgraph-xml.Tests.ps1`). A live Horde run now stamps
-  `build-info.json` with its own CL in-graph — **verify on the next live run**; no separate manual stamp step.
+- **CL-stamp parity — ✅ LIVE-VERIFIED 2026-06-22.** `lyra-pipeline.xml`'s in-graph `Stamp Lyra` node
+  (added `c0688df`; asserted by `buildgraph-xml.Tests.ps1`) stamps `build-info.json` `source: horde` /
+  `orchestrator: Horde` on a live Horde run (job `6a3990fc…`). Caught + fixed a **deployed-config drift**
+  en route — the live server ran a stale stream template missing `-set:Source=horde`, so the first run
+  stamped `teamcity`; redeployed the template to `C:\ProgramData\Epic\Horde\Server\` (hot-reload) → re-run
+  → `horde`. See `unreal/lessons-learned.md` #6. Step 2's win condition is now fully live-verified.
 - **Hardware reality (don't over-promise):** 8 cores = honest **overhead-overlap, not farm-scale**.
   UBA is ~29% *slower* single-box (lesson #3 — its win is remote agents, which one box lacks), and
   even unlimited RAM won't change that (the cost is ~22 s server/CAS/detour setup, not memory). The
