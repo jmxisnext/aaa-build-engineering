@@ -1,31 +1,33 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: d7975e2 - docs(capstone): Slice 3 - Zen/DDC writeup (Capstone complete)
+Branch: main   |   Last commit: 2b2d584 - docs(ideation): re-propose gameplay-systems SAD -> slim Verse charter; spin out [redacted]
 
 ## What was just built
-- **Capstone Slice 3 (`d7975e2`)** - Zen/DDC + production-ephemeral writeup
-  (`capstone/ddc-and-ephemeral-ci.md`): cooker-as-mini-DDC (cook_key/output_hash/CAS + incremental
-  skip), the cross-machine shared-DDC story (unreal lessons #4-5), and the K8s cloud-profile as the
-  production disposable-agent path. Zen facts verified (default Local DDC since UE 5.4).
-- **Capstone Slice 2 (`fcaa12f`)** - ephemeral disposable-agent demo
-  (`capstone/demo-disposable-agent.ps1`): a `docker run --rm` container reusing a standing agent's
-  licensed identity auto-authorizes, runs a build, and is disposed; try/finally guarantees restore.
-  Verified green live (Cook Assets #9 ran on the disposable). Surfaced the 3-agent license cap.
-- **Capstone Slice 1 (`8697637`)** - two-part demo runbook (`capstone/demo-capstone.ps1` + README):
-  policy-gated submit through broker :1667 -> hoops chain -> CL-stamped artifact + provenance -> real
-  content-addressed cook -> dashboard. Verified green; hardened from a 14-finding adversarial review;
-  fixed a silent REST-fields detection bug.
+- **Gameplay-systems SAD ideation (`2b2d584`)** - sanity-checked a [redacted] "[redacted]"
+  SAD and re-proposed it via `/jam:ideate`. Verified Verse facts (transactional `<transacts>` +
+  structured concurrency real; persistence is player-keyed `weak_map`/constants-only; UE6 general
+  runtime ~2027+, UEFN-only now). Slimmed 8 pillars/~48 docs to **3 Verse-distinctive pillars + 1
+  runnable UEFN reference mechanic**. Full record in `docs/ideation/2026-06-24-gameplay-systems-sad/`
+  (scoreboard, 5 candidate verdicts, original SAD, `REPROPOSED-CHARTER.md`); 4 bridge lines appended
+  to `SEEDS.md`; cleared the stale post-Capstone-fork "Next" in `ROADMAP_NEXT.md`.
+- **Spun out `jammers-lab/[redacted]`** - new sibling experiment carrying the Verse charter
+  (`docs/CHARTER.md`) + a pre-registered probe-001 skeleton. Designated an **[redacted]**
+  (Track 1): incubate lab-side now, promote to `[redacted]` + lock the thesis at G0.
 
 ## Live edge
-The **Capstone (Phase 2 Step 4) is COMPLETE** - all three slices shipped + verified, every spec
-done-criterion met plus the disposable-agent stretch. The stack is **down** (TeamCity removed; p4d +
-broker stopped). The capstone spine (Tracks 1,2,5 + observability) is fully exercised on disposable
-infra; accel (Track 3) and unreal/Horde (Track 4) are surfaced on the dashboard, not re-run.
+Capstone is COMPLETE and the **post-Capstone fork is resolved**: Verse/UE6 left aaa-build for its
+own experiment (`[redacted]`), keeping this repo's build-engineering identity pure. The remaining
+aaa-build thread is **Track 5 Step 3 - the deferred cooker GUI tool (PySide6 or WPF)**; everything
+else (Tracks 1-4 + observability + Capstone) has shipped. Stack is **down** (TeamCity removed; p4d +
+broker stopped).
 
 ## Next
-Decide the **post-Capstone fork** the spec set up: **Verse/UE6 exploration vs the PySide6 cooker GUI
-tool** (Track 5's deferred artist tool - PySide6/Qt over WPF). Then scope its first runnable slice.
-To re-demo the Capstone: start p4d + broker (`perforce/scripts/start-p4d.ps1`,
-`perforce/broker/start-broker.ps1`) + `docker compose -f ci/docker-compose.yml up -d`, wait for the
-agents to connect, then `pwsh -File capstone/demo-capstone.ps1` (and `demo-disposable-agent.ps1`).
+Pick the aaa-build thread or switch repos:
+- **aaa-build:** scope **Track 5 Step 3 cooker GUI tool** - decide PySide6 vs WPF (ROADMAP_NEXT
+  lines 42-43 keep WPF as the defended choice; PySide6 is the Maya-adjacent alt), then define its
+  smallest demoable slice over the existing `pipeline/` cooker.
+- **[redacted]:** `cd J:\jammers-lab\[redacted]` -> `/jam:startup`; G0 = the trait-inheritance
+  transactional mechanic running in UEFN (install/confirm UEFN first).
+To re-demo the Capstone: start p4d + broker + `docker compose -f ci/docker-compose.yml up -d`, wait
+for agents, then `pwsh -File capstone/demo-capstone.ps1`.
