@@ -138,13 +138,16 @@ after a restart is slower — bump these), plus `-BaseUrl`, `-Stream`, etc.
 
 ---
 
-## Roadmap (post-Slice-1)
+## The three slices (all in)
 
-- **Slice 2 — disposable CI agent (stretch).** A scripted fresh agent container per demo build,
-  auto-authorized via a captured `AGENT_TOKEN`, disposed with `--rm`. TeamCity 2026.1 has no bundled
-  Docker-cloud profile for a local host, so this is a host-script wrapper, not a cloud profile.
-- **Slice 3 — Zen/DDC + production-ephemeral writeup.** Frames the `.toc` CAS as a hand-rolled
-  mini-DDC, and scopes the Kubernetes cloud-profile path as the production disposable-agent answer
-  (deliberately written up, not stood up locally).
+- **Slice 1 — two-part demo runbook** — this doc + `demo-capstone.ps1` (policy-gated submit → chain →
+  CL-stamped artifact → real cook → dashboard).
+- **Slice 2 — disposable CI agent (stretch)** — `demo-disposable-agent.ps1`: a fresh `docker run --rm`
+  agent that auto-authorizes by reusing a licensed identity, runs a build, and is disposed. (TeamCity
+  2026.1 has no bundled Docker-cloud profile for a local host, so it's a host-script wrapper — see the
+  writeup for why, and the Kubernetes production path.)
+- **Slice 3 — Zen/DDC + production-ephemeral writeup** — [`ddc-and-ephemeral-ci.md`](./ddc-and-ephemeral-ci.md):
+  frames the cooker as a hand-rolled mini-DDC and maps both demos (content-addressed cook, ephemeral
+  agent) to their AAA-scale forms (Zen shared DDC, Kubernetes cloud profile).
 
 Full design: `docs/superpowers/specs/2026-06-24-capstone-design.md`.
