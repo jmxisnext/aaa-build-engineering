@@ -19,19 +19,25 @@ Branch: main   |   Last commit: fb1cff5 - docs: live-verify CI cook round-trip; 
   not a build tool; Track-5 step-3 tool stays **C# WPF / PySide6**.
 
 ## Live edge
-CI-cook validation is closed. Phase 2's remaining Track-5 piece is the **C# WPF (or PySide6) artist
-tool** over `pipeline/cook.py` (the last "to come" item); after that, **Step 4 Capstone stitch**
-(submit→CI→cook→package, repo-as-demo). UE6/Verse is deliberately parked to a separate experiment to
-keep aaa-build's build-engineering identity pure.
+**Sequencing locked (planning turn after closeout): Capstone FIRST.** The remaining Track-5 GUI tool
+AND the UE6/Verse pivot are both deferred to a single **post-Capstone fork** — once the Capstone caps
+the spine, decide: go in the **Verse/UE6 direction** (its own experiment) or build the **cooker GUI
+tool** (and if the tool, **PySide6/Qt over WPF** — repo-native Python, `import cooker` directly,
+~1–1.5 days, no .NET toolchain). CI-cook validation is closed (this session) and de-risked the
+Capstone's cook stage.
 
 ## Next
-Pick one:
-1. **Track 5 step 3 — C# WPF / PySide6 artist tool** over `pipeline/cook.py` (the remaining Track-5
-   artifact; cooker side ready — dep-edges in `.toc`, `--dry-run`, `--pack`). Verse was considered
-   and rejected (gameplay language, not a build tool — see `SEEDS.md` 2026-06-24).
-2. **Quick doc fix (drift from this session):** `README.md:13` + `CLAUDE.md:11` still say "live
-   TeamCity validation gated" though it's now validated (`fb1cff5`). Clear both.
-3. **Harden the first-build seed** (lessons #15): automate the seed-first step in
-   `bootstrap-builds.ps1` (or document it in the runbook) so a fresh-server (`down -v`)
-   `Cook Assets` doesn't 404 on the self artifact-dep.
-4. **Stand up the UE6/Verse experiment** (`/jam:new`) per the `SEEDS.md` 2026-06-24 handoff prompt.
+**Capstone — Phase 2 Step 4 (the cap).** Stitch the proven pieces into one end-to-end demo:
+P4 submit → policy-gated CI → cook → package → CL-version-stamped artifact, run on a
+**containerized / ephemeral agent** (opp #4; Rockstar explicitly requires Docker), plus a
+**Zen/DDC writeup** framing the cooker as a mini-DDC/CAS. The pieces all exist — P4 submit-trigger,
+CI chain, cook-in-CI (live-verified this session), version-stamp, Horde — so the work is
+integration + ephemeral-agent + writeup (~2–3 sessions). **First slice:** a clean end-to-end run
+from one P4 submit through to the stamped package, then layer in the ephemeral agent.
+
+**Post-Capstone fork:** Verse/UE6 experiment (`/jam:new`, see `SEEDS.md` 2026-06-24) **vs** the
+PySide6 cooker GUI tool.
+
+Side items (not blocking, do if convenient): harden the first-build seed in `bootstrap-builds.ps1`
+(lessons #15, fresh-server `down -v` 404); the README `.toc` shape (line 51) omits the `deps`
+field that's actually emitted — trivial doc nit.
