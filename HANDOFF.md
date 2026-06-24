@@ -1,34 +1,37 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 7664313 - docs: live-verify Horde in-graph CL stamp (item 4); capture DDC + config-drift lessons
+Branch: main   |   Last commit: fb1cff5 - docs: live-verify CI cook round-trip; capture first-build + cooker-source findings
 
 ## What was just built
-**Heavy-lift session: "prep for the heavy lift" → the offline prep campaign (batches 1-3) was already
-100% committed, so this session ran the live Horde cook and validated the gated items.**
-
-- `docs:` (7664313, this session) — **live-verified the Horde in-graph CL stamp (item 4).** First live
-  Horde run stamped `source=teamcity` under Horde; root-caused to **deployed-config drift** — the live
-  server (`C:\ProgramData\Epic\Horde\Server\game-main.stream.json`) ran a stale stream template missing
-  `-set:Source=horde`, even though the repo had it. Redeployed → ~3-min warm re-run → `build-info.json`
-  + `.metrics` now read `source: horde` / `orchestrator: Horde`. Added lessons #5 (shared DDC stays
-  sparse when local DDC is warm) + #6 (running Horde config ≠ repo config; verify on a live run).
-- `docs:` (712aac5, prior-session tail) — reconciled durable docs after CI cook-wiring shipped.
+- **CI-cook live validation DONE** (`fb1cff5` + live infra work). Brought up the TeamCity/Docker
+  stack + p4d/broker, provisioned `AAASandbox_CookAssets`, and proved the warm-cache round-trip
+  live: cold `cooked 8 / cached 0` → warm `cooked 0 / cached 8` (guard `cached=8`), 144 428 B both
+  runs. Closes the long-standing gated spec §8 item.
+- **Two findings captured** (`ci/lessons-learned.md` #15): the self artifact-dep **can't bootstrap
+  the first build** (404 on `lastSuccessful`; TeamCity has no optional-dep flag → **seed-first**:
+  detach dep → cold build → re-attach); and the cooker source had to be **imported into `//tools/`**
+  (P4 Change 52, `import pipeline/... //tools/pipeline/...`) because `pipeline/` isn't in the
+  `//game/main` stream the agent checks out.
+- Fixed `depot-layout.md` import syntax (view-first); marked spec §8 + `ROADMAP_NEXT.md` step 3
+  live-verified; fed the dashboard **"Cook (Track 5)"** panel with the real warm-cache numbers.
+- Parked **UE6/Verse → its own experiment** (`SEEDS.md` 2026-06-24): Verse is a gameplay language,
+  not a build tool; Track-5 step-3 tool stays **C# WPF / PySide6**.
 
 ## Live edge
-Phase 2 **Step 2 (Horde) is now fully live-verified** — item 4 closed; `source: horde` in the package
-+ dashboard metric. The cold→warm shared-DDC demo was found **not demonstrable on this single box**
-(warm local DDC → empty shared node stays sparse; local hits don't back-propagate — lesson #5); its
-real payoff is **cross-machine**. The documented cold cook number stays **24.6 min** (2026-06-13).
-Live services (p4d + Horde agent) were **shut down** at end of session — box is clear for Docker work.
+CI-cook validation is closed. Phase 2's remaining Track-5 piece is the **C# WPF (or PySide6) artist
+tool** over `pipeline/cook.py` (the last "to come" item); after that, **Step 4 Capstone stitch**
+(submit→CI→cook→package, repo-as-demo). UE6/Verse is deliberately parked to a separate experiment to
+keep aaa-build's build-engineering identity pure.
 
 ## Next
 Pick one:
-1. **CI-cook live validation** (the long-standing gated item, HANDOFF carry-over): bring up the
-   TeamCity/Docker stack, trigger `AAASandbox_CookAssets` twice, confirm build #1 cold (`cached 0`)
-   → build #2 warm (`cached>0`). Services are DOWN now, so it's clear to start Docker (31 GB ceiling —
-   Horde must stay down). The one Track-5 thing offline couldn't prove.
-2. **Track 5 step 3 — C# WPF artist tool** over the cooker (cooker side ready: dep-edges in `.toc`,
-   `--dry-run`, `--pack`). The remaining "to come" Track-5 item.
-3. **Quick win from this session's seeds:** add a repo↔deployed config-drift check to
-   `horde-preflight.ps1` — would have caught the `-set:Source=horde` drift offline (lesson #6).
+1. **Track 5 step 3 — C# WPF / PySide6 artist tool** over `pipeline/cook.py` (the remaining Track-5
+   artifact; cooker side ready — dep-edges in `.toc`, `--dry-run`, `--pack`). Verse was considered
+   and rejected (gameplay language, not a build tool — see `SEEDS.md` 2026-06-24).
+2. **Quick doc fix (drift from this session):** `README.md:13` + `CLAUDE.md:11` still say "live
+   TeamCity validation gated" though it's now validated (`fb1cff5`). Clear both.
+3. **Harden the first-build seed** (lessons #15): automate the seed-first step in
+   `bootstrap-builds.ps1` (or document it in the runbook) so a fresh-server (`down -v`)
+   `Cook Assets` doesn't 404 on the self artifact-dep.
+4. **Stand up the UE6/Verse experiment** (`/jam:new`) per the `SEEDS.md` 2026-06-24 handoff prompt.
