@@ -1,33 +1,31 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: f8ab631 - docs: scope the Capstone MVP (Phase 2 Step 4 design spec)
+Branch: main   |   Last commit: d7975e2 - docs(capstone): Slice 3 - Zen/DDC writeup (Capstone complete)
 
 ## What was just built
-- **CI-cook live validation DONE** (`fb1cff5`): provisioned `AAASandbox_CookAssets` on the live
-  TeamCity stack and proved the warm-cache round-trip — cold `8/0` → warm `0/8` (guard `cached=8`),
-  144 428 B both runs. Closed gated spec §8. Cooker imported into `//tools/` (P4 Change 52) + a
-  stream import so the agent syncs it; findings in `ci/lessons-learned.md` #15.
-- **Dashboard** fed the real warm-cache numbers ("Cook (Track 5)" panel); **drift cleared**
-  (`8e2babd` — README/CLAUDE.md "validation gated" → validated).
-- **Sequencing locked** (`06de63d`): **Capstone first**, then a post-Capstone fork (Verse/UE6 vs the
-  cooker GUI tool — PySide6/Qt over WPF if the tool).
-- **Capstone MVP scoped** (`f8ab631`): `docs/superpowers/specs/2026-06-24-capstone-design.md`.
+- **Capstone Slice 3 (`d7975e2`)** - Zen/DDC + production-ephemeral writeup
+  (`capstone/ddc-and-ephemeral-ci.md`): cooker-as-mini-DDC (cook_key/output_hash/CAS + incremental
+  skip), the cross-machine shared-DDC story (unreal lessons #4-5), and the K8s cloud-profile as the
+  production disposable-agent path. Zen facts verified (default Local DDC since UE 5.4).
+- **Capstone Slice 2 (`fcaa12f`)** - ephemeral disposable-agent demo
+  (`capstone/demo-disposable-agent.ps1`): a `docker run --rm` container reusing a standing agent's
+  licensed identity auto-authorizes, runs a build, and is disposed; try/finally guarantees restore.
+  Verified green live (Cook Assets #9 ran on the disposable). Surfaced the 3-agent license cap.
+- **Capstone Slice 1 (`8697637`)** - two-part demo runbook (`capstone/demo-capstone.ps1` + README):
+  policy-gated submit through broker :1667 -> hoops chain -> CL-stamped artifact + provenance -> real
+  content-addressed cook -> dashboard. Verified green; hardened from a 14-finding adversarial review;
+  fixed a silent REST-fields detection bug.
 
 ## Live edge
-Capstone (Phase 2 Step 4) is the next build — fully scoped in the spec above. It's the cap: stitch
-the proven Tracks 1–5 pieces into one end-to-end demo on disposable infra (provenance + observability,
-not a new component). After it caps the spine, the post-Capstone fork decides **Verse/UE6 vs the
-PySide6 cooker tool**.
+The **Capstone (Phase 2 Step 4) is COMPLETE** - all three slices shipped + verified, every spec
+done-criterion met plus the disposable-agent stretch. The stack is **down** (TeamCity removed; p4d +
+broker stopped). The capstone spine (Tracks 1,2,5 + observability) is fully exercised on disposable
+infra; accel (Track 3) and unreal/Horde (Track 4) are surfaced on the dashboard, not re-run.
 
 ## Next
-**Execute the Capstone spec** — `docs/superpowers/specs/2026-06-24-capstone-design.md`, Slice 1 first.
-
-**First action:** bring the stack up (Docker + p4d + broker) and run **one** submit→chain→stamped-
-artifact cycle to confirm the baseline still works **after this session's changes** (the `//tools`
-stream import + the new `Cook Assets` config) — then write `demo-capstone.ps1` (Slice 1: the
-end-to-end demo runbook). Then Slice 2 (scripted-disposable agent — de-risked; no bundled Docker cloud in TC 2026.1, see the revised spec) → Slice 3
-(Zen/DDC writeup).
-
-Side items (not blocking): harden the first-build seed in `bootstrap-builds.ps1` (lessons #15,
-fresh-server `down -v` 404); README `.toc` shape (line 51) omits the emitted `deps` field (trivial).
+Decide the **post-Capstone fork** the spec set up: **Verse/UE6 exploration vs the PySide6 cooker GUI
+tool** (Track 5's deferred artist tool - PySide6/Qt over WPF). Then scope its first runnable slice.
+To re-demo the Capstone: start p4d + broker (`perforce/scripts/start-p4d.ps1`,
+`perforce/broker/start-broker.ps1`) + `docker compose -f ci/docker-compose.yml up -d`, wait for the
+agents to connect, then `pwsh -File capstone/demo-capstone.ps1` (and `demo-disposable-agent.ps1`).
