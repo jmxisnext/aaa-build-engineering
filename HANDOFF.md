@@ -26,7 +26,7 @@ PySide6 cooker tool**.
 **First action:** bring the stack up (Docker + p4d + broker) and run **one** submit→chain→stamped-
 artifact cycle to confirm the baseline still works **after this session's changes** (the `//tools`
 stream import + the new `Cook Assets` config) — then write `demo-capstone.ps1` (Slice 1: the
-end-to-end demo runbook). Then Slice 2 (ephemeral Docker-cloud agent — the main risk) → Slice 3
+end-to-end demo runbook). Then Slice 2 (scripted-disposable agent — de-risked; no bundled Docker cloud in TC 2026.1, see the revised spec) → Slice 3
 (Zen/DDC writeup).
 
 Side items (not blocking): harden the first-build seed in `bootstrap-builds.ps1` (lessons #15,
