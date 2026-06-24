@@ -181,8 +181,10 @@ CL-stamped artifact + provenance + dashboard, verified green; hardened from a 14
 review) → Slice 2 ephemeral disposable agent (`fcaa12f`, `capstone/demo-disposable-agent.ps1` — `--rm`
 container reusing a licensed identity, auto-auth, build, dispose; surfaced the 3-agent license cap) →
 Slice 3 Zen/DDC + production-ephemeral writeup (`d7975e2`, `capstone/ddc-and-ephemeral-ci.md` — K8s
-cloud-profile as the production path). See `capstone/README.md`. **Next: the post-Capstone fork —
-Verse/UE6 vs the PySide6 cooker GUI tool (Track 5's deferred artist tool).**
+cloud-profile as the production path). See `capstone/README.md`. **Post-Capstone fork resolved
+(2026-06-24): Verse/UE6 was spun out to its own lab experiment (`jammers-lab/[redacted]`) to keep
+aaa-build's build-engineering identity pure; the remaining aaa-build next is the Track-5 PySide6/WPF
+cooker GUI tool (Step 3, the deferred artist tool).**
 
 ## High-leverage opportunities (ranked, from the audit + web research)
 
