@@ -8,4 +8,4 @@ Skill ladder for AAA build / databuild engineering roles. Operating principle (f
 
 - Every track's success criterion is a **demoable artifact** ("I built this, here's why"). Define that artifact before starting the track; loop until it runs / demos.
 - Bias to building. If you catch yourself producing notes or research instead of a runnable artifact, stop and build the smallest version that runs.
-- Keep tracks isolated in their subdir (`perforce/`, `ci/`, `accel/`, `unreal/`, `pipeline/`; `pipeline/` is Track 5 — slice 1 (content cooker) + CI wiring (additive `Cook Assets` stage + dashboard panel; live TeamCity validation gated) landed; C# WPF tool still to come). Don't let one track's work bleed into another's.
+- Keep tracks isolated in their subdir (`perforce/`, `ci/`, `accel/`, `unreal/`, `pipeline/`; `pipeline/` is Track 5 — slice 1 (content cooker) + CI wiring (additive `Cook Assets` stage + dashboard panel; live-validated 2026-06-24, cold→warm) landed; C# WPF tool still to come). Don't let one track's work bleed into another's.
