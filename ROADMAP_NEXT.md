@@ -175,8 +175,14 @@ artifact, then layer the differentiator onto the same graph.
 - Deferred to here because Step 1's `RunUAT` cook already gives a *real* UE cook — Track 5 is the
   conceptual-depth + artist-tooling story, not the only cook on the table.
 
-**Step 4 — Capstone stitch** (last). End-to-end submit→CI→cook→package→versioned artifact;
-repo-as-demo; containerized/ephemeral agent (opp #4); Zen/DDC writeup.
+**Step 4 — Capstone stitch** (last) — **✅ DONE 2026-06-24.** All three slices shipped + verified:
+Slice 1 two-part demo runbook (`8697637`, `capstone/demo-capstone.ps1` — submit→CI→cook→package→
+CL-stamped artifact + provenance + dashboard, verified green; hardened from a 14-finding adversarial
+review) → Slice 2 ephemeral disposable agent (`fcaa12f`, `capstone/demo-disposable-agent.ps1` — `--rm`
+container reusing a licensed identity, auto-auth, build, dispose; surfaced the 3-agent license cap) →
+Slice 3 Zen/DDC + production-ephemeral writeup (`d7975e2`, `capstone/ddc-and-ephemeral-ci.md` — K8s
+cloud-profile as the production path). See `capstone/README.md`. **Next: the post-Capstone fork —
+Verse/UE6 vs the PySide6 cooker GUI tool (Track 5's deferred artist tool).**
 
 ## High-leverage opportunities (ranked, from the audit + web research)
 
