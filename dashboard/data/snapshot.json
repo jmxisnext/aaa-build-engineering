@@ -352,5 +352,14 @@
         "utc": "2026-06-13T19:11:54Z"
       }
     ]
+  },
+  "pipeline": {
+    "stale": false,
+    "cooked": 0,
+    "cached": 8,
+    "totalBytes": 144428,
+    "elapsedSec": 0.0006,
+    "warm": true,
+    "utc": "2026-06-24T12:34:12Z"
   }
 }

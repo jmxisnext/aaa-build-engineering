@@ -166,8 +166,10 @@ artifact, then layer the differentiator onto the same graph.
 
 **Step 3 — Track 5: cook pipeline + WPF tool** (the long pole; **cooker + CI wiring shipped 2026-06-22; WPF UI deferred**).
 - Python cooker (dep graph + content-hash incremental + `.toc`) ✅ → **CI wiring** ✅ (additive
-  `Cook Assets` stage, warm-cache via self artifact-dep, + dashboard panel; live TeamCity
-  validation gated) → **WPF UI** (kept — distinct artist-tooling signal; the remaining step).
+  `Cook Assets` stage, warm-cache via self artifact-dep, + dashboard panel) → **live TeamCity
+  validation** ✅ **2026-06-24** (cold `8/0` → warm `0/8`; caveats — first build is seed-first, and
+  the cooker was imported into `//tools/`; see `ci/lessons-learned.md` #15) → **WPF UI** (kept —
+  distinct artist-tooling signal; the remaining step).
   Additive by design: the Track-2 stub Cook Data job is left in place, not replaced. Frame as a
   hand-rolled **DDC/CAS**; speak to incremental cook (UE 5.7 beta). [opp #3]
 - Deferred to here because Step 1's `RunUAT` cook already gives a *real* UE cook — Track 5 is the

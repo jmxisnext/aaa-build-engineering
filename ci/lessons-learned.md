@@ -751,4 +751,65 @@ needs one staged into the agent's jre dir first; and hand-declaring the capabili
 satisfies the build *requirement* but not the runner's tool *selection* — those are separate code
 paths."*
 
+## 15. A self-referencing artifact dependency can't bootstrap itself — the first build 404s
+
+**What happened:** Live-validating the CI cook (`AAASandbox_CookAssets`, the warm-cacheable
+content-cook stage) for the first time, the first two triggered builds failed **before the cook
+step ever ran** — at *Resolving artifact dependencies*:
+
+```
+Failed to resolve artifact dependency <AAA Sandbox / Cook Assets, latest successful build>:
+... Illegal status [404] ... /AAASandbox_CookAssets/latest.lastSuccessful/teamcity-ivy.xml
+```
+
+The stage carries its content-addressed store across builds via a **self artifact-dependency**
+(`revisionName=lastSuccessful`, `cooked.zip!** => pipeline/cooked`). On the **first-ever** build
+there is no successful build to resolve `lastSuccessful` against, so TeamCity 404s on the ivy
+descriptor and fails the build hard. The design spec had anticipated the empty-cache case and
+claimed the mitigation was to *"configure the self artifact-dep so a missing source build is
+non-fatal"* — but **no such per-dependency option exists**. An artifact dependency that can't
+resolve its source build always fails the build.
+
+**Root cause:** `lastSuccessful` is a hard reference; there is no "optional / tolerate-missing"
+flag on a TeamCity artifact dependency (unlike a *snapshot* dependency's `MAKE_FAILED_TO_START`).
+A self-referencing cache dependency is therefore a chicken-and-egg: the build needs its own prior
+output to start, but the first build has none. Offline checks (config-shape assertions, local
+cold→warm cook proofs) can't catch this — it's pure live build-server semantics.
+
+**Fix (seed-first):** detach the self-dep, run one **cold** build (no cache to restore — it cooks
+everything and *publishes* `cooked.zip`, establishing a `lastSuccessful`), then re-attach the dep.
+From then on every build resolves the cache normally. Verified end-to-end after seeding: cold
+`cooked 8 / cached 0` → warm `cooked 0 / cached 8` (guard `cached=8` passes), identical
+144 428-byte output both runs. For a from-scratch server (`down -v`) this seed step must live in
+the runbook (or be automated in `bootstrap-builds.ps1` — run the config once with the dep absent
+before attaching it). A script-side alternative drops the artifact dependency entirely and has the
+cook step `curl` the prior CAS from the REST artifacts API tolerating a 404 — but that trades
+TeamCity's built-in cache plumbing for hand-rolled fetch logic.
+
+**Companion gap — the cooker source wasn't on the agent.** The same first run also surfaced that
+`pipeline/` lives only in git, while the stage checks out the P4 `//game/main` stream (the hoops
+sample), which doesn't contain it — the cook step would have failed at `make-samples.py: No such
+file` even past the dependency. Fixed by submitting the cooker to the `//tools/pipeline/...` depot
+(Change 52) and adding a stream **import** (`import pipeline/... //tools/pipeline/...`) so the
+agent's stream client syncs it — the depot-design-correct home (tools ∈ `//tools/`), verified by
+generating the client view (`p4 client -S //game/main -o`) before the run.
+
+**Why a build engineer cares:** the self-referencing-artifact cache is a common, tempting pattern
+(it's how you persist a CAS/DDC across CI runs without external infra), and it has a sharp,
+build-server-specific edge: it cannot bootstrap itself. Any "the build depends on its own last
+output" design needs an explicit first-run seed path — and that path only fails on a *fresh*
+server, exactly the disaster-recovery moment you can least afford a surprise. The companion lesson
+is the recurring one in this repo (cf. #2, #8): a stage's *source* must actually be in the VCS root
+the agent checks out — "it runs locally from the repo root" says nothing about what a clean P4/Git
+checkout contains.
+
+**Takeaway:** *"Our warm-cache CI cook used a self artifact-dependency on `lastSuccessful` to carry
+its content-addressed store across builds — and the first-ever build 404'd before cooking, because
+there's no prior successful build to resolve and TeamCity has no 'optional artifact dependency'
+flag (the spec assumed one exists; it doesn't). Fix: seed the first build with the dep detached
+(cold cook publishes the CAS), then attach it — cold 8/0 → warm 0/8 verified. A self-cache can't
+bootstrap itself, and that only bites on a fresh server. Bonus gotcha from the same run: the cooker
+lived only in git, not the P4 stream the agent checks out, so it had to be seeded into `//tools/`
+and stream-imported."*
+
 

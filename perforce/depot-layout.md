@@ -104,8 +104,8 @@ Paths:
     share Content/...
     share Tools/.../game/...      # game-specific tool plugins
     isolate Local/...              # per-workspace cache, never submitted
-    import //engine/main/Engine/... Engine/...
-    import //thirdparty/sdk/...    Thirdparty/sdk/...
+    import Engine/... //engine/main/Engine/...
+    import Thirdparty/sdk/... //thirdparty/sdk/...
 Remapped:
     Content/Cooked/... .nosync/Cooked/...    # don't auto-sync cooked artifacts
 Ignored:
@@ -115,6 +115,8 @@ Ignored:
 ```
 
 **Why the `import` directives matter:** they let engineers see `//engine/` content in their `//game/` workspace as if it were a subdirectory, without having to manage two clients. The engine team still owns the source of truth in `//engine/`.
+
+> **Import syntax is view-first** — `import <view_path> <depot_path>` (e.g. `import Engine/... //engine/main/Engine/...`). Verified live against the sandbox 2026-06-24 when the Track-5 cooker was imported into this stream (`import pipeline/... //tools/pipeline/...`, Change 52); an earlier draft of this doc had the operands reversed.
 
 ## Workspace (client) conventions
 

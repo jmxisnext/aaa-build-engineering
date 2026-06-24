@@ -127,6 +127,19 @@ The first-build artifact-dep behavior is the one genuine TeamCity-semantics risk
 
 ## 8. Gated (out of offline scope — deferred per campaign §5 "just the run")
 
+> **✅ LIVE-VERIFIED 2026-06-24.** Ran against the live TeamCity stack. Config provisioned via
+> `bootstrap-builds.ps1`; cold→warm round-trip proven — build #3 **cold** `cooked 8 / cached 0` →
+> build #4 **warm** `cooked 0 / cached 8` (guard `cached=8` passed) → build #5 warm steady-state
+> `0/8`, identical 144 428-byte output. Two findings the live run surfaced (offline couldn't):
+> (1) **the first-ever build hard-fails** — the self artifact-dep 404s on `lastSuccessful` with no
+> prior build, and **TeamCity has no "optional dependency" flag**, so mitigation (a) below does NOT
+> exist as config; the working pattern is **seed-first** (detach dep → cold build publishes the CAS
+> → re-attach). (2) **the cooker source wasn't on the agent** — `pipeline/` lives only in git, not
+> the P4 `//game/main` stream the stage checks out; fixed by submitting it to `//tools/pipeline/...`
+> (Change 52) and a stream import (`import pipeline/... //tools/pipeline/...`). Both captured in
+> `ci/lessons-learned.md` #15. Cross-agent reuse is architecturally covered (server-side artifact)
+> but both builds landed on `agent-linux-02`; not explicitly forced onto separate agents.
+
 - Creating the `AAASandbox_CookAssets` config via `bootstrap-builds.ps1` REST against the running server.
 - The self artifact-dep round-trip across two real builds (incl. the first-build non-fatal behavior).
 - The measured warm-vs-cold delta and **cross-agent** cache reuse (cook on agent-02 reusing agent-01's published CAS).
