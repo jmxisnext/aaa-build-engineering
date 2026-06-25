@@ -1,33 +1,36 @@
 # Handoff - aaa-build-engineering
 
 ## Resume from
-Branch: main   |   Last commit: 2b2d584 - docs(ideation): re-propose gameplay-systems SAD -> slim Verse charter; spin out [redacted]
+Branch: main   |   Last commit: 5b41559 - chore: jam closeout (session since = a read-only pre-publish audit, no new repo commits)
 
 ## What was just built
-- **Gameplay-systems SAD ideation (`2b2d584`)** - sanity-checked a [redacted] "[redacted]"
-  SAD and re-proposed it via `/jam:ideate`. Verified Verse facts (transactional `<transacts>` +
-  structured concurrency real; persistence is player-keyed `weak_map`/constants-only; UE6 general
-  runtime ~2027+, UEFN-only now). Slimmed 8 pillars/~48 docs to **3 Verse-distinctive pillars + 1
-  runnable UEFN reference mechanic**. Full record in `docs/ideation/2026-06-24-gameplay-systems-sad/`
-  (scoreboard, 5 candidate verdicts, original SAD, `REPROPOSED-CHARTER.md`); 4 bridge lines appended
-  to `SEEDS.md`; cleared the stale post-Capstone-fork "Next" in `ROADMAP_NEXT.md`.
-- **Spun out `jammers-lab/[redacted]`** - new sibling experiment carrying the Verse charter
-  (`docs/CHARTER.md`) + a pre-registered probe-001 skeleton. Designated an **[redacted]**
-  (Track 1): incubate lab-side now, promote to `[redacted]` + lock the thesis at G0.
+- **Pre-publish security & hygiene audit** (no repo changes — the deliverable was an external
+  remediation script). Results: **gitleaks clean across full history** (0 leaks, both this repo and
+  `[redacted]`); `ci/.env` safe (only `TEAMCITY_VERSION`); no tracked key/token/PII files. The one
+  real exposure: this repo is **ALREADY PUBLIC** (`jmxisnext/aaa-build-engineering`) and the **18
+  unpushed commits would NEWLY publish [redacted] IP** — [redacted] / [redacted] / [redacted] /
+  [redacted] + the [redacted] thesis + `mythogenic` — via `docs/ideation/2026-06-24-gameplay-
+  systems-sad/` (first appearance in history; verified). `chronicle-kernel` by name is *already*
+  public (pre-06-22).
+- **Remediation decided + scripted** (delivered as `prepush-scrub.sh` in the session scratchpad —
+  gated/dry-run by default): relocate `docs/ideation/` → unpublished `[redacted]`; gitignore
+  `.superpowers/` + `.pytest_cache/`; trim the new anchor refs from SEEDS/HANDOFF; optionally purge
+  `docs/superpowers/` from history (force-push). **Not yet run.**
 
 ## Live edge
-Capstone is COMPLETE and the **post-Capstone fork is resolved**: Verse/UE6 left aaa-build for its
-own experiment (`[redacted]`), keeping this repo's build-engineering identity pure. The remaining
-aaa-build thread is **Track 5 Step 3 - the deferred cooker GUI tool (PySide6 or WPF)**; everything
-else (Tracks 1-4 + observability + Capstone) has shipped. Stack is **down** (TeamCity removed; p4d +
-broker stopped).
+**DO NOT push the 18 unpushed commits as-is** — `docs/ideation/` would leak the [redacted]
+strategy into a public repo. The scrub is designed but not executed. Capstone (the actual portfolio
+payoff) is clean and good to publish once the scrub lands. Stack is **down**.
 
 ## Next
-Pick the aaa-build thread or switch repos:
-- **aaa-build:** scope **Track 5 Step 3 cooker GUI tool** - decide PySide6 vs WPF (ROADMAP_NEXT
-  lines 42-43 keep WPF as the defended choice; PySide6 is the Maya-adjacent alt), then define its
-  smallest demoable slice over the existing `pipeline/` cooker.
-- **[redacted]:** `cd J:\jammers-lab\[redacted]` -> `/jam:startup`; G0 = the trait-inheritance
-  transactional mechanic running in UEFN (install/confirm UEFN first).
+1. **Scrub, then publish.** Minimum force-free fix for the must-not-leak anchor IP (it's only in
+   unpushed commits): relocate the folder to `[redacted]`, then from this repo run
+   `git filter-repo --path docs/ideation/2026-06-24-gameplay-systems-sad --invert-paths` and a
+   normal `git push`. Force-push is needed ONLY if you also purge already-public `docs/superpowers/`
+   in the same filter-repo pass. `pip install git-filter-repo` first (not installed). The fuller
+   gated runbook is `prepush-scrub.sh` (scratchpad is ephemeral — regenerate if gone).
+2. **Then** (lower priority) scope **Track 5 Step 3 cooker GUI tool** (PySide6 vs WPF) — the last
+   open aaa-build thread; or switch to `[redacted]` (probe-001 code-complete, blocked on a UEFN install).
+
 To re-demo the Capstone: start p4d + broker + `docker compose -f ci/docker-compose.yml up -d`, wait
 for agents, then `pwsh -File capstone/demo-capstone.ps1`.
