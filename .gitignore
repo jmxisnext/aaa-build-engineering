@@ -59,3 +59,7 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Local tooling state (never publish)
+.superpowers/
+.pytest_cache/
