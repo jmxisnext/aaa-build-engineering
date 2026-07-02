@@ -1,0 +1,8 @@
+# Keep the GitHub Actions pins current. No pip entry: python deps are
+# installed ad hoc in ci/agent/Dockerfile with no tracked manifest.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

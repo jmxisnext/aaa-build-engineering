@@ -18,7 +18,9 @@ services:
     container_name: teamcity-server
     restart: unless-stopped
     ports:
-      - "8111:8111"
+      # localhost-only: agents reach the server by container name on the
+      # compose network; only the host browser/scripts need this binding
+      - "127.0.0.1:8111:8111"
     volumes:
       - ./data/teamcity_server/datadir:/data/teamcity_server/datadir
       - ./data/teamcity_server/logs:/opt/teamcity/logs
