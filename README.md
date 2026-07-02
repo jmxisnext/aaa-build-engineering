@@ -8,16 +8,13 @@ This is not a one-off experiment. It's an ongoing skill ladder.
 
 - `ROLE_NOTES.md` — what the target role actually is, day-to-day, and what its tech surface looks like.
 - `SKILLS_ROADMAP.md` — 5 practice tracks + a capstone. Each track produces one demoable artifact.
-- `HANDOFF.md` — current session resume.
-- `SEEDS.md` — parked ideas.
 - Subdirs added per track as work progresses: `perforce/`, `ci/`, `accel/`, `unreal/`, `pipeline/` (`pipeline/` — Track 5; slice 1 (content cooker / mini DDC-CAS) + CI wiring (additive `Cook Assets` stage + dashboard panel; live-validated 2026-06-24, cold→warm) landed; C# WPF tool still to come).
 - `dashboard/` — observability dashboard aggregating all four built tracks (CI, accel, perforce, Unreal/Lyra) into one self-contained `dashboard.html` that opens offline. Built from a committed real snapshot (`collect-metrics` → `snapshot.json` → `build-dashboard`).
 
 ## How to use this repo across sessions
 
-- Open a session: `/jam:startup`. Reads `HANDOFF.md`, gives a resume block.
-- Close a session: `/jam:closeout`. Overwrites `HANDOFF.md` with the next-session prompt, optionally appends to `SEEDS.md`.
-- Parked thoughts go in `SEEDS.md` so they're not lost between sessions but also don't dilute the active live-edge.
+- Open a session: `/jam:startup` (reads the resume prompt); close one: `/jam:closeout` (writes the next one).
+- Session state lives in local-only, untracked files (`HANDOFF.md` for the session resume, `SEEDS.md` for parked ideas) — working notes stay off the public record. The durable story is this README, the roadmap docs, and each track's `lessons-learned.md`.
 
 ## Operating principle
 
