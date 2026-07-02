@@ -63,3 +63,7 @@ Thumbs.db
 # Local tooling state (never publish)
 .superpowers/
 .pytest_cache/
+
+# Session state - local-only, never published (untracked 2026-07-01)
+/HANDOFF.md
+/SEEDS.md
