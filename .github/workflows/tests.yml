@@ -19,7 +19,7 @@ jobs:
     name: perforce triggers/tools (python)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -30,7 +30,7 @@ jobs:
     name: pipeline cooker (python)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -48,7 +48,7 @@ jobs:
     name: hoops_tests (c++ shotmeter)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure + build + test
         working-directory: ci/samples/hoops-brawl-seed/stream
         run: |
@@ -60,7 +60,7 @@ jobs:
     name: dashboard render/collect (powershell)
     runs-on: ubuntu-latest   # pwsh is preinstalled on GitHub ubuntu runners
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: build-dashboard render tests
         shell: pwsh
         run: ./dashboard/tests/build-dashboard.Tests.ps1
